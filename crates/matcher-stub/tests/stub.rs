@@ -24,17 +24,22 @@ fn load_vectors() -> Vec<Vector> {
     paths
         .into_iter()
         .map(|p| {
-            let data = fs::read_to_string(&p)
-                .unwrap_or_else(|e| panic!("read {}: {e}", p.display()));
-            serde_json::from_str(&data)
-                .unwrap_or_else(|e| panic!("parse {}: {e}", p.display()))
+            let data =
+                fs::read_to_string(&p).unwrap_or_else(|e| panic!("read {}: {e}", p.display()));
+            serde_json::from_str(&data).unwrap_or_else(|e| panic!("parse {}: {e}", p.display()))
         })
         .collect()
 }
 
 #[test]
 fn conformance_vectors() {
-    for vector in load_vectors() {
+    let vectors = load_vectors();
+    assert!(
+        vectors.len() >= 16,
+        "expected at least 16 vectors, found {}",
+        vectors.len()
+    );
+    for vector in vectors {
         run_vector(StubMatcher::new, &vector).unwrap_or_else(|e| panic!("{e}"));
     }
 }
@@ -130,7 +135,7 @@ fn random_messages_invariants() {
         id_counter += 1;
         let roll = rng.next_range(100);
         let msg = if roll < 85 {
-            let side = if rng.next_u64() % 2 == 0 {
+            let side = if rng.next_u64() & 1 == 0 {
                 Side::Buy
             } else {
                 Side::Sell
@@ -171,12 +176,8 @@ fn random_messages_invariants() {
             assert!(fill.qty_lots > 0);
             assert_eq!(fill.seq, next_seq_expected);
             next_seq_expected += 1;
-            *fill_qty_by_order
-                .entry(fill.taker_id.clone())
-                .or_insert(0) += fill.qty_lots;
-            *fill_qty_by_order
-                .entry(fill.maker_id.clone())
-                .or_insert(0) += fill.qty_lots;
+            *fill_qty_by_order.entry(fill.taker_id.clone()).or_insert(0) += fill.qty_lots;
+            *fill_qty_by_order.entry(fill.maker_id.clone()).or_insert(0) += fill.qty_lots;
         }
 
         check_invariants(&matcher, &fill_qty_by_order, &order_qty);

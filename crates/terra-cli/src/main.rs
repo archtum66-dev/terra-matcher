@@ -2,7 +2,7 @@
 
 use std::env;
 use std::fs;
-use std::io::{self, BufRead, Write};
+use std::io::{self, Write};
 use std::path::Path;
 use std::process;
 
@@ -44,8 +44,7 @@ fn read_market(path: &str) -> Result<Market, String> {
 fn run_match(market_path: &str, orders_path: &str) -> Result<(), String> {
     let market = read_market(market_path)?;
     let mut matcher = StubMatcher::new(market);
-    let orders_data =
-        fs::read_to_string(orders_path).map_err(|e| format!("read orders: {e}"))?;
+    let orders_data = fs::read_to_string(orders_path).map_err(|e| format!("read orders: {e}"))?;
     let stdout = io::stdout();
     let mut out = stdout.lock();
     for (line_no, line) in orders_data.lines().enumerate() {
@@ -53,9 +52,8 @@ fn run_match(market_path: &str, orders_path: &str) -> Result<(), String> {
         if trimmed.is_empty() {
             continue;
         }
-        let msg: Message = serde_json::from_str(trimmed).map_err(|e| {
-            format!("parse order line {}: {e}", line_no + 1)
-        })?;
+        let msg: Message = serde_json::from_str(trimmed)
+            .map_err(|e| format!("parse order line {}: {e}", line_no + 1))?;
         let (ack, fills) = matcher.process(msg);
         serde_json::to_writer(&mut out, &AckLine { ack: &ack })
             .map_err(|e| format!("write ack: {e}"))?;

@@ -5,7 +5,6 @@ members = [
     "crates/matcher-stub",
     "crates/terra-cli",
 ]
-license = "MIT"
 
 [workspace.package]
 edition = "2021"

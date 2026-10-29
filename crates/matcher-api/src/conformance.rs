@@ -10,15 +10,11 @@ pub struct Vector {
     pub expected: Vec<ExpectedLine>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum ExpectedLine {
-    Ack {
-        ack: Ack,
-    },
-    Fill {
-        fill: Fill,
-    },
+    Ack { ack: Ack },
+    Fill { fill: Fill },
 }
 
 /// Run `input` through `make(market)` and compare output to `vector.expected`.

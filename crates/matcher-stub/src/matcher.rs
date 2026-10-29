@@ -46,46 +46,26 @@ impl StubMatcher {
         }
     }
 
+    /// A post-only order crosses if the first crossing price level is headed by another account.
+    /// A level headed by the same account is a self-trade (cancel-newest), not a cross.
     fn would_cross_post_only(&self, order: &Order) -> bool {
-        match order.side {
-            Side::Buy => self
-                .sells
-                .iter()
-                .find(|(&price, queue)| {
-                    price <= order.price_ticks
-                        && queue.front().is_some_and(|m| m.account != order.account)
-                })
-                .is_some(),
-            Side::Sell => self
-                .buys
-                .iter()
-                .rev()
-                .find(|(&price, queue)| {
-                    price >= order.price_ticks
-                        && queue.front().is_some_and(|m| m.account != order.account)
-                })
-                .is_some(),
+        match self.peek_opposite_maker(order) {
+            Some((_, maker)) => maker.account != order.account,
+            None => false,
         }
     }
 
     fn best_bid(&self) -> Option<u64> {
-        self.buys.iter().rev().find_map(|(&p, q)| {
-            if q.is_empty() {
-                None
-            } else {
-                Some(p)
-            }
-        })
+        self.buys
+            .iter()
+            .rev()
+            .find_map(|(&p, q)| if q.is_empty() { None } else { Some(p) })
     }
 
     fn best_ask(&self) -> Option<u64> {
-        self.sells.iter().find_map(|(&p, q)| {
-            if q.is_empty() {
-                None
-            } else {
-                Some(p)
-            }
-        })
+        self.sells
+            .iter()
+            .find_map(|(&p, q)| if q.is_empty() { None } else { Some(p) })
     }
 
     fn push_resting(&mut self, order: Order, qty_lots: u64) {
@@ -182,8 +162,7 @@ impl StubMatcher {
                 book.entry(maker_price)
                     .or_default()
                     .push_front(maker.clone());
-                self.location
-                    .insert(maker.id.clone(), (side, maker_price));
+                self.location.insert(maker.id.clone(), (side, maker_price));
             }
         }
     }
@@ -206,10 +185,7 @@ impl StubMatcher {
         let mut filled_lots = 0u64;
         let mut fills = Vec::new();
 
-        loop {
-            let Some((maker_price, maker)) = self.peek_opposite_maker(&order) else {
-                break;
-            };
+        while let Some((maker_price, maker)) = self.peek_opposite_maker(&order) {
             if maker.account == order.account {
                 break;
             }

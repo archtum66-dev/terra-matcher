@@ -64,7 +64,7 @@ An overflow rejects the order (`amount_overflow`).
 1. **Price-time priority.** Best price first, within one price level the oldest order first.
 2. **Fills trade at the maker's price.** A buyer never pays more than their limit, a seller never receives less.
 3. **`gtc`:** the remainder rests in the book. **`ioc`:** the remainder is cancelled. **`post_only`:** rejected with `post_only_would_cross` if it would match at once, otherwise it rests.
-4. **Self-trade:** if the incoming order would match a resting order of the **same account**, matching stops and the incoming remainder is cancelled (cancel-newest). No fill is produced, the resting order stays.
+4. **Self-trade:** if the incoming order would match a resting order of the **same account**, matching stops and the incoming remainder is cancelled (cancel-newest). No fill is produced, the resting order stays. This also applies to `post_only`: if the first crossing price level is headed by the same account, the order is accepted and its remainder is cancelled (not rejected with `post_only_would_cross`).
 5. **Determinism:** the same input sequence always produces the same acks and fills, byte for byte. No clocks, no randomness.
 6. **Cancel** removes the resting remainder. Cancelling an unknown id gives `unknown_order`, someone else's id gives `not_owner`.
 7. **Output order:** for every input message the matcher emits the ack first, then the fills of that message in `seq` order.

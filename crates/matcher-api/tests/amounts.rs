@@ -36,6 +36,6 @@ fn quote_amount_overflow_on_price_multiply() {
 
 #[test]
 fn quote_amount_overflow_on_qty_multiply() {
-    let m = test_market(u128::MAX / 2 + 1, 2);
+    let m = test_market(1, u128::MAX / 2 + 1);
     assert_eq!(quote_amount(&m, 2, 1), None);
 }
