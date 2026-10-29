@@ -1,0 +1,11 @@
+/target
+**/target
+*.env
+.env*
+.dev.vars
+*.key
+*.pem
+*.log
+node_modules/
+.DS_Store
+Thumbs.db
