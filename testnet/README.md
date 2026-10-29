@@ -1,4 +1,4 @@
-# Testnet run kit (steps 1-5)
+# Testnet run kit (steps 1-7)
 
 PowerShell scripts to prepare the escrow contract and test tokens on NEAR **testnet**. For the contract rules, see `docs/ESCROW.md`. **Untested on a live network.** The scripts were run only against a local simulator of near-cli-rs and of the RPC (command forms and JSON arguments checked); the first live run is yours. They send transactions only when you start them.
 
@@ -64,13 +64,44 @@ Do register NEP-145 storage, mint test tokens, and `ft_transfer_call` into the e
 
 Default amounts: `100000000` base units to Bob (base token), `1000000000` quote units to Alice (6 decimals). A balance table must match before the script succeeds.
 
+## Step 6 — Settle
+
+Do sign matching buy/sell orders with `terra-keys`, submit two fills via `settle`, and expect an overfill attempt to fail, see `6-settle.ps1`.
+
+```powershell
+.\6-settle.ps1
+```
+
+Anyone may call `settle`; the default submitter is the base token contract account (not Alice or Bob). The script runs two partial fills, then tries one lot more than remains open — the contract should reject that; a failed `near` exit code there is normal.
+
+Example manual tools (placeholders):
+
+```powershell
+terra-keys make-order --key-file <PATH>\alice.order-key --contract-id <ESCROW> --account-id <ALICE> --base-token <BASE> --quote-token <QUOTE> --lot-size-base 1000000 --quote-per-tick-lot 1000 --side buy --price-ticks 100 --qty-lots 5 --nonce 1 --expires-in-secs 3600
+terra-keys settle-args --buy-file orders\buy.json --sell-file orders\sell.json --fill-lots 3 --price-ticks 95
+terra-keys verify-order --signed-order-file orders\buy.json --key-file <PATH>\alice.order-key
+```
+
+Signed order JSON is written under `testnet\orders\` (gitignored). Transaction gas and hashes from step 6 appear in the settle table on stdout.
+
+## Step 7 — Withdraw
+
+Do withdraw all non-zero escrow balances for Alice and Bob, see `7-withdraw.ps1`.
+
+```powershell
+.\7-withdraw.ps1
+```
+
+Writes `testnet\results\summary.md` with a table of all recorded transactions (labels, Tgas, links to testnet.nearblocks.io).
+
 ## Run all steps
 
 ```powershell
 .\run-1-to-5.ps1 -Prefix terra1
+.\run-1-to-7.ps1 -Prefix terra1
 ```
 
-Or double-click `RUN-1-TO-5.bat` and enter a prefix.
+Or double-click `RUN-1-TO-5.bat` or `RUN-1-TO-7.bat` and enter a prefix.
 
 Use `-DryRun` on any script to print `near` commands without sending transactions (RPC view helpers still run where noted in `lib.ps1`).
 
@@ -86,7 +117,7 @@ Use `-DryRun` on any script to print `near` commands without sending transaction
 - Scripts refuse the word `mainnet` in `near` argument lists
 - Logs and console output redact `ed25519:` keys, seed-phrase and secret-key lines, and the paths of `*.order-key` files; no script prints or logs key file contents
 
-Logs: `testnet\logs\`. State (public IDs and key hex only): `testnet\state.json`.
+Logs: `testnet\logs\`. State (public IDs and key hex only): `testnet\state.json`. Full-run transaction summary: `testnet\results\summary.md`.
 
 ## Troubleshooting
 
@@ -94,6 +125,4 @@ Logs: `testnet\logs\`. State (public IDs and key hex only): `testnet\state.json`
 - Missing WASM: run step 2 with `-Build` or copy files into `testnet\wasm\`
 - `-DryRun` to inspect commands; compare logs under `testnet\logs\`
 
-## Not covered yet
-
-On-chain **settle** and **withdraw** (manual steps 6 and 7 in `docs/TESTNET.md`) need signed orders and are not automated here.
+Still **untested on a live network** for steps 6 and 7 until you run them on testnet.

@@ -73,17 +73,31 @@ Deposit quote token for the buyer and base token for the seller before settling.
 
 ## 6. Settle a fill
 
-Do submit matching signed orders (`buy`, `sell`, `fill_lots`, `price_ticks`), see `docs/ESCROW.md` section 3. JSON shapes come from `docs/ESCROW.md` section 1.
+Do build signed orders with `terra-keys`, assemble `settle` JSON with `terra-keys settle-args`, then submit the transaction, see `docs/ESCROW.md` section 3. Step `testnet/6-settle.ps1` automates two fills and an overfill check.
+
+Create and sign a buy order:
 
 ```bash
-near contract call-function as-transaction <ESCROW_ACCOUNT> settle json-args '{"buy":{"order":{...},"signature":"<128_HEX>"},"sell":{"order":{...},"signature":"<128_HEX>"},"fill_lots":5,"price_ticks":100}' prepaid-gas '100 Tgas' attached-deposit '0 NEAR' sign-as <ANY_ACCOUNT> network-config testnet sign-with-keychain send
+terra-keys make-order --key-file <ORDER_KEY_FILE> --contract-id <ESCROW_ACCOUNT> --account-id <ALICE> --base-token <BASE_TOKEN> --quote-token <QUOTE_TOKEN> --lot-size-base 1000000 --quote-per-tick-lot 1000 --side buy --price-ticks 100 --qty-lots 5 --nonce 1 --expires-in-secs 3600
+```
+
+Build settle arguments from buy and sell order files:
+
+```bash
+terra-keys settle-args --buy-file <BUY_JSON> --sell-file <SELL_JSON> --fill-lots 3 --price-ticks 95
+```
+
+Submit (use the JSON line from `settle-args` as `json-args`):
+
+```bash
+near contract call-function as-transaction <ESCROW_ACCOUNT> settle json-args '<SETTLE_ARGS_JSON>' prepaid-gas '100 Tgas' attached-deposit '0 NEAR' sign-as <ANY_ACCOUNT> network-config testnet sign-with-keychain send
 ```
 
 Anyone may call `settle`; signatures must verify against each trader's registered key.
 
 ## 7. Withdraw free balance
 
-Do attach **1 yoctoNEAR** and call `withdraw`, see `docs/ESCROW.md` section 2. `withdraw` forwards 30 Tgas to the token's `ft_transfer` and 10 Tgas to its own callback, so attach at least 60 Tgas. These values are estimates; adjust them after the first live run.
+Do attach **1 yoctoNEAR** and call `withdraw`, see `docs/ESCROW.md` section 2. `testnet/7-withdraw.ps1` withdraws all four escrow balances for Alice and Bob and writes `testnet/results/summary.md`. `withdraw` forwards 30 Tgas to the token's `ft_transfer` and 10 Tgas to its own callback, so attach at least 60 Tgas. These values are estimates; adjust them after the first live run.
 
 ```bash
 near contract call-function as-transaction <ESCROW_ACCOUNT> withdraw json-args '{"token_id":"<QUOTE_TOKEN>","amount":"<AMOUNT>","receiver_id":null}' prepaid-gas '100 Tgas' attached-deposit '1 yoctoNEAR' sign-as <ALICE> network-config testnet sign-with-keychain send

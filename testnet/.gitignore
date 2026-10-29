@@ -4,3 +4,4 @@ logs/
 wasm/*.wasm
 bin/
 *.order-key
+orders/
