@@ -76,7 +76,7 @@ Each fill produces exactly one **pair** of unsigned `token_diff` intent drafts (
 
 ## Escrow contract
 
-The NEAR testnet escrow holds NEP-141 deposits as free balances, verifies ed25519-signed limit orders, and applies fills when anyone calls `settle`. Rules, error strings, and events are defined in `docs/ESCROW.md`. A manual testnet checklist (placeholders only) is in `docs/TESTNET.md`.
+The NEAR testnet escrow holds NEP-141 deposits as free balances, verifies ed25519-signed limit orders, and applies fills when anyone calls `settle`. Rules, error strings, and events are defined in `docs/ESCROW.md`. A manual testnet checklist (placeholders only) is in `docs/TESTNET.md`. See [`testnet/README.md`](testnet/README.md) (Testnet run kit: scripts for the first five steps).
 
 **State:** builds to wasm (about 360 KB) and passes 26 unit tests. **Not deployed, not tested on a live network, not audited.**
 

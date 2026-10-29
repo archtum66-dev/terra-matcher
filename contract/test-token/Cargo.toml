@@ -1,0 +1,24 @@
+[package]
+name = "terra-test-token"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[workspace]
+
+[dependencies]
+near-sdk = "5"
+near-contract-standards = "5"
+
+[dev-dependencies]
+near-sdk = { version = "5", features = ["unit-testing"] }
+
+[profile.release]
+opt-level = "z"
+lto = true
+panic = "abort"
+overflow-checks = true
+codegen-units = 1

@@ -1,5 +1,7 @@
 # Escrow on NEAR testnet (manual checklist)
 
+For scripted steps 1–5 (accounts, WASM, deploy, keys, deposit), see [`testnet/README.md`](../testnet/README.md).
+
 This document is a **do X, see Y** guide for deploying and exercising the escrow contract with [near-cli-rs](https://github.com/near/near-cli-rs). **Untested on a live network** — steps are written from the contract spec, not from a recorded testnet run.
 
 Replace placeholders: `<ESCROW_ACCOUNT>`, `<ALICE>`, `<BOB>`, `<BASE_TOKEN>`, `<QUOTE_TOKEN>`.
@@ -11,6 +13,8 @@ Do create a named account on testnet, see [NEAR testnet wallet / CLI docs](https
 ```bash
 near account create-account sponsor-by-faucet-service <ESCROW_ACCOUNT> autogenerate-new-keypair save-to-keychain network-config testnet create
 ```
+
+Keys are stored in the local keychain (`save-to-keychain`), not printed to the terminal.
 
 Repeat for trader accounts `<ALICE>` and `<BOB>` if needed.
 
@@ -41,10 +45,10 @@ Do deploy to `<ESCROW_ACCOUNT>`, see NEAR CLI `deploy` help.
 near contract deploy <ESCROW_ACCOUNT> use-file <PATH_TO_escrow.wasm> without-init-call network-config testnet sign-with-keychain send
 ```
 
-If your flow requires an init call:
+Then initialize in a **separate** transaction:
 
 ```bash
-near contract deploy <ESCROW_ACCOUNT> use-file <PATH_TO_escrow.wasm> with-init-call new json-args {} network-config testnet sign-with-keychain send
+near contract call-function as-transaction <ESCROW_ACCOUNT> new json-args '{}' prepaid-gas '30 Tgas' attached-deposit '0 NEAR' sign-as <ESCROW_ACCOUNT> network-config testnet sign-with-keychain send
 ```
 
 ## 4. Register order keys
@@ -52,10 +56,12 @@ near contract deploy <ESCROW_ACCOUNT> use-file <PATH_TO_escrow.wasm> with-init-c
 Each trader registers a 32-byte ed25519 public key (64 hex characters). Do call `register_key`, see `docs/ESCROW.md` section 2.
 
 ```bash
-near contract call-function as-access-key <ALICE> register_key json-args '{"public_key_hex":"<64_HEX_CHARS>"}' prepaid-gas '30 Tgas' attached-deposit '0 NEAR' network-config testnet sign-with-keychain send
+near contract call-function as-transaction <ESCROW_ACCOUNT> register_key json-args '{"public_key_hex":"<64_HEX_CHARS>"}' prepaid-gas '30 Tgas' attached-deposit '0 NEAR' sign-as <ALICE> network-config testnet sign-with-keychain send
 ```
 
 ## 5. Deposit (NEP-141)
+
+The sender account and the escrow account must be registered on the token contract first (`storage_deposit`, NEP-145). The kit script `testnet/5-deposit.ps1` does this for the test tokens before minting and transferring.
 
 Do send tokens with `ft_transfer_call` and an **empty** `msg` so the escrow credits free balance, see `ft_on_transfer` in `docs/ESCROW.md`.
 

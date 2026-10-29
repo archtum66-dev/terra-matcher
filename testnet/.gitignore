@@ -1,0 +1,6 @@
+state.json
+state.*.json
+logs/
+wasm/*.wasm
+bin/
+*.order-key

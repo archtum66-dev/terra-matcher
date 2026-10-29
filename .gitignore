@@ -9,3 +9,8 @@
 node_modules/
 .DS_Store
 Thumbs.db
+*.order-key
+/testnet/state.json
+/testnet/logs/
+/testnet/bin/
+/testnet/wasm/*.wasm

@@ -6,6 +6,7 @@ members = [
     "crates/matcher-stub",
     "crates/settlement",
     "crates/terra-cli",
+    "crates/terra-keys",
     "crates/web-demo",
 ]
 
