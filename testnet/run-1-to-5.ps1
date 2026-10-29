@@ -37,9 +37,10 @@ function Invoke-Step {
     foreach ($k in $Extra.Keys) {
         $params[$k] = $Extra[$k]
     }
+    $global:LASTEXITCODE = 0
     & $path @params
-    if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) {
-        exit $LASTEXITCODE
+    if ($global:LASTEXITCODE -ne 0) {
+        exit $global:LASTEXITCODE
     }
 }
 

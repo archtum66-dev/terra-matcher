@@ -7,8 +7,9 @@ fn bin() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_terra-keys"))
 }
 
-fn temp_dir() -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("terra-keys-test-{}", std::process::id()));
+fn temp_dir(tag: &str) -> PathBuf {
+    // one directory per test: the tests run in parallel
+    let dir = std::env::temp_dir().join(format!("terra-keys-test-{}-{}", std::process::id(), tag));
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).expect("create temp dir");
     dir
@@ -20,12 +21,16 @@ fn cleanup(dir: &PathBuf) {
 
 #[test]
 fn keygen_creates_file_and_public_hex() {
-    let dir = temp_dir();
+    let dir = temp_dir("keygen_creates_file_and_public_hex");
     let out = Command::new(bin())
         .args(["keygen", "--name", "alice", "--out", dir.to_str().unwrap()])
         .output()
         .expect("run keygen");
-    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(!stdout.contains('\n') || stdout.lines().count() == 1);
     let json: serde_json::Value = serde_json::from_str(stdout.trim()).expect("parse json");
@@ -35,14 +40,19 @@ fn keygen_creates_file_and_public_hex() {
     let key_path = dir.join("alice.order-key");
     let contents = fs::read_to_string(&key_path).expect("read key file");
     assert_eq!(contents.trim().len(), 64);
-    assert!(contents.trim().chars().all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()));
-    assert!(!stdout.to_lowercase().contains(&contents.trim().to_lowercase()));
+    assert!(contents
+        .trim()
+        .chars()
+        .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()));
+    assert!(!stdout
+        .to_lowercase()
+        .contains(&contents.trim().to_lowercase()));
     cleanup(&dir);
 }
 
 #[test]
 fn pubkey_matches_keygen() {
-    let dir = temp_dir();
+    let dir = temp_dir("pubkey_matches_keygen");
     let out1 = Command::new(bin())
         .args(["keygen", "--name", "bob", "--out", dir.to_str().unwrap()])
         .output()
@@ -65,10 +75,14 @@ fn pubkey_matches_keygen() {
 
 #[test]
 fn pubkey_from_known_seed() {
-    let dir = temp_dir();
+    let dir = temp_dir("pubkey_from_known_seed");
     let key_path = dir.join("fixed.order-key");
     fs::write(&key_path, format!("{}\n", "07".repeat(32))).expect("write seed");
-    let expected = hex::encode(SigningKey::from_bytes(&[7u8; 32]).verifying_key().to_bytes());
+    let expected = hex::encode(
+        SigningKey::from_bytes(&[7u8; 32])
+            .verifying_key()
+            .to_bytes(),
+    );
     let out = Command::new(bin())
         .args(["pubkey", "--key-file", key_path.to_str().unwrap()])
         .output()
@@ -82,7 +96,7 @@ fn pubkey_from_known_seed() {
 
 #[test]
 fn keygen_refuses_overwrite() {
-    let dir = temp_dir();
+    let dir = temp_dir("keygen_refuses_overwrite");
     let dir_str = dir.to_str().unwrap();
     assert!(Command::new(bin())
         .args(["keygen", "--name", "dup", "--out", dir_str])
@@ -100,9 +114,15 @@ fn keygen_refuses_overwrite() {
 
 #[test]
 fn keygen_rejects_invalid_name() {
-    let dir = temp_dir();
+    let dir = temp_dir("keygen_rejects_invalid_name");
     let out = Command::new(bin())
-        .args(["keygen", "--name", "Bad Name!", "--out", dir.to_str().unwrap()])
+        .args([
+            "keygen",
+            "--name",
+            "Bad Name!",
+            "--out",
+            dir.to_str().unwrap(),
+        ])
         .output()
         .expect("run keygen");
     assert_eq!(out.status.code(), Some(2));

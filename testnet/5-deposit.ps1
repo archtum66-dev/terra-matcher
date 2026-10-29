@@ -23,6 +23,10 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'lib.ps1')
+if ($DryRun -and -not $env:TERRA_STATE_FILE) {
+    # a dry run never touches the real state file
+    $Script:StateFile = Join-Path $PSScriptRoot 'state.dry-run.json'
+}
 
 Start-Log -Name '5-deposit' | Out-Null
 

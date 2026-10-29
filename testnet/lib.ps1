@@ -36,9 +36,9 @@ function Assert-AccountId {
 function Assert-NoMainnetInArgs {
     param(
         [Parameter(Mandatory = $true)]
-        [string[]]$Args
+        [string[]]$ArgList
     )
-    foreach ($a in $Args) {
+    foreach ($a in $ArgList) {
         if ($a -eq 'mainnet') {
             throw 'refusing to use mainnet'
         }
@@ -46,8 +46,10 @@ function Assert-NoMainnetInArgs {
 }
 
 function Quote-NativeArg {
+    # Quote one argument for a Windows command line (CommandLineToArgvW rules).
     param(
         [Parameter(Mandatory = $true)]
+        [AllowEmptyString()]
         [string]$Arg
     )
     if ($Arg.Length -eq 0) {
@@ -58,36 +60,26 @@ function Quote-NativeArg {
     }
     $sb = New-Object System.Text.StringBuilder
     [void]$sb.Append('"')
-    $i = 0
-    while ($i -lt $Arg.Length) {
-        $c = $Arg[$i]
-        if ($c -eq '\') {
+    $bs = 0
+    foreach ($ch in $Arg.ToCharArray()) {
+        if ($ch -eq [char]'\') {
+            $bs++
+        } elseif ($ch -eq [char]'"') {
+            # backslashes before a quote are doubled, the quote itself is escaped
+            [void]$sb.Append('\' * ($bs * 2 + 1))
+            [void]$sb.Append('"')
             $bs = 0
-            $j = $i
-            while ($j -lt $Arg.Length -and $Arg[$j] -eq '\') {
-                $bs++
-                $j++
-            }
-            $quoteCount = 0
-            $k = $j
-            while ($k -lt $Arg.Length -and $Arg[$k] -eq '"') {
-                $quoteCount++
-                $k++
-            }
-            if ($quoteCount -gt 0) {
-                [void]$sb.Append(('\\' * ($bs * 2 + $quoteCount)))
-                $i = $k
-            } else {
-                [void]$sb.Append('\\')
-                $i++
-            }
-        } elseif ($c -eq '"') {
-            [void]$sb.Append('\"')
-            $i++
         } else {
-            [void]$sb.Append($c)
-            $i++
+            if ($bs -gt 0) {
+                [void]$sb.Append('\' * $bs)
+                $bs = 0
+            }
+            [void]$sb.Append($ch)
         }
+    }
+    if ($bs -gt 0) {
+        # trailing backslashes are doubled because the closing quote follows
+        [void]$sb.Append('\' * ($bs * 2))
     }
     [void]$sb.Append('"')
     return $sb.ToString()
@@ -117,26 +109,15 @@ function Redact-SensitiveText {
 
 function Redact-ArgumentList {
     param(
-        [string[]]$Args
+        [string[]]$ArgList
     )
     $result = @()
-    for ($i = 0; $i -lt $Args.Count; $i++) {
-        $a = $Args[$i]
-        $prev = $null
-        if ($i -gt 0) {
-            $prev = $Args[$i - 1]
-        }
-        if ($null -ne $prev) {
-            if (($prev -eq '--key' -or $prev -match '(?i)seed') -and $a -match '^[0-9a-fA-F]{64}$') {
-                $result += '<redacted>'
-                continue
-            }
-        }
+    foreach ($a in $ArgList) {
         if ($a -like '*.order-key') {
             $result += '<redacted-path>'
-            continue
+        } else {
+            $result += $a
         }
-        $result += $a
     }
     return $result
 }
@@ -152,10 +133,9 @@ function Invoke-Native {
     foreach ($a in $ArgumentList) {
         $quoted += (Quote-NativeArg -Arg $a)
     }
-    $argLine = $quoted -join ' '
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = $FilePath
-    $psi.Arguments = $argLine
+    $psi.Arguments = ($quoted -join ' ')
     $psi.UseShellExecute = $false
     $psi.RedirectStandardOutput = $true
     $psi.RedirectStandardError = $true
@@ -163,13 +143,14 @@ function Invoke-Native {
     $proc = New-Object System.Diagnostics.Process
     $proc.StartInfo = $psi
     [void]$proc.Start()
-    $stdout = $proc.StandardOutput.ReadToEnd()
-    $stderr = $proc.StandardError.ReadToEnd()
+    # read both streams asynchronously so a full pipe cannot block the child
+    $outTask = $proc.StandardOutput.ReadToEndAsync()
+    $errTask = $proc.StandardError.ReadToEndAsync()
     $proc.WaitForExit()
     return [PSCustomObject]@{
         ExitCode = $proc.ExitCode
-        StdOut   = $stdout
-        StdErr   = $stderr
+        StdOut   = $outTask.Result
+        StdErr   = $errTask.Result
     }
 }
 
@@ -214,15 +195,15 @@ function Invoke-Near {
         [string[]]$NearArgs,
         [switch]$DryRun
     )
-    Assert-NoMainnetInArgs -Args $NearArgs
-    $near = Get-NearExecutable
-    $displayArgs = Redact-ArgumentList -Args $NearArgs
+    Assert-NoMainnetInArgs -ArgList $NearArgs
+    $displayArgs = Redact-ArgumentList -ArgList $NearArgs
     $cmdDisplay = "near $($displayArgs -join ' ')"
     if ($DryRun) {
         Write-Host "[dry-run] $cmdDisplay"
         Write-LogLine "[dry-run] $cmdDisplay"
         return [PSCustomObject]@{ ExitCode = 0; StdOut = ''; StdErr = '' }
     }
+    $near = Get-NearExecutable
     Write-Host $cmdDisplay
     Write-LogLine $cmdDisplay
     $result = Invoke-Native -FilePath $near -ArgumentList $NearArgs
@@ -242,7 +223,8 @@ function Invoke-Near {
     return $result
 }
 
-function Invoke-Rpc {
+function Invoke-RpcRaw {
+    # Returns the parsed JSON-RPC response (result or error), throws only on transport errors.
     param(
         [Parameter(Mandatory = $true)]
         [string]$Method,
@@ -256,47 +238,47 @@ function Invoke-Rpc {
         params  = $Params
     } | ConvertTo-Json -Depth 10 -Compress
     try {
-        $resp = Invoke-RestMethod -Uri $Script:RpcUrl -Method Post -ContentType 'application/json' -Body $body
+        return (Invoke-RestMethod -Uri $Script:RpcUrl -Method Post -ContentType 'application/json' -Body $body)
     } catch {
         throw "RPC request failed: $($_.Exception.Message)"
     }
-    if ($resp.error) {
-        throw "RPC error: $($resp.error.message)"
+}
+
+function Invoke-Rpc {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Method,
+        [Parameter(Mandatory = $true)]
+        $Params
+    )
+    $resp = Invoke-RpcRaw -Method $Method -Params $Params
+    if ($resp.PSObject.Properties['error'] -and $null -ne $resp.error) {
+        throw "RPC error: $($resp.error.message) $($resp.error.data)"
     }
     return $resp.result
 }
 
 function Get-AccountInfo {
+    # Returns the account record, or $null when the account does not exist.
     param(
         [Parameter(Mandatory = $true)]
         [string]$AccountId
     )
     Assert-AccountId -AccountId $AccountId
-    $params = @{
+    $resp = Invoke-RpcRaw -Method 'query' -Params @{
         request_type = 'view_account'
         finality     = 'final'
         account_id   = $AccountId
     }
-    $body = @{
-        jsonrpc = '2.0'
-        id      = 'terra-testnet'
-        method  = 'query'
-        params  = $params
-    } | ConvertTo-Json -Compress
-    try {
-        $resp = Invoke-RestMethod -Uri $Script:RpcUrl -Method Post -ContentType 'application/json' -Body $body
-    } catch {
-        throw "RPC request failed: $($_.Exception.Message)"
-    }
-    if ($resp.error) {
-        $errName = $resp.error.name
-        if ($resp.error.cause -and $resp.error.cause.name) {
+    if ($resp.PSObject.Properties['error'] -and $null -ne $resp.error) {
+        $errName = ''
+        if ($resp.error.PSObject.Properties['cause'] -and $null -ne $resp.error.cause -and $resp.error.cause.PSObject.Properties['name']) {
             $errName = $resp.error.cause.name
         }
         if ($errName -eq 'UNKNOWN_ACCOUNT') {
             return $null
         }
-        throw "RPC error: $($resp.error.message)"
+        throw "RPC error: $($resp.error.message) $($resp.error.data)"
     }
     return $resp.result
 }
@@ -314,6 +296,7 @@ function Test-ContractDeployed {
 }
 
 function Get-NearBalance {
+    # Balance in NEAR as a decimal (4 places). 0 when the account does not exist.
     param(
         [Parameter(Mandatory = $true)]
         [string]$AccountId
@@ -323,10 +306,11 @@ function Get-NearBalance {
         return [decimal]0
     }
     $yocto = [System.Numerics.BigInteger]::Parse($info.amount)
-    $divisor = [System.Numerics.BigInteger]::Pow(10, 24)
-    $whole = [System.Numerics.BigInteger]::Divide($yocto, $divisor)
-    $wholeDec = [decimal]::Parse($whole.ToString())
-    return [math]::Round($wholeDec, 4)
+    $unit = [System.Numerics.BigInteger]::Pow(10, 24)
+    $whole = [System.Numerics.BigInteger]::Divide($yocto, $unit)
+    $rest = [System.Numerics.BigInteger]::Remainder($yocto, $unit)
+    $value = [decimal]::Parse($whole.ToString()) + ([decimal]::Parse($rest.ToString()) / [decimal]1000000000000000000000000)
+    return [math]::Round($value, 4)
 }
 
 function Invoke-View {
@@ -342,7 +326,7 @@ function Invoke-View {
         Write-Host "[dry-run] skipped view $Contract.$Method"
         return $null
     }
-    Assert-AccountId -Contract $Contract
+    Assert-AccountId -AccountId $Contract
     $json = '{}'
     if ($null -ne $ArgsObject) {
         $json = ($ArgsObject | ConvertTo-Json -Compress -Depth 10)
@@ -423,6 +407,11 @@ function Invoke-CheckWasm {
         if (-not $DryRun) {
             if (-not (Test-Path -LiteralPath $WasmDir)) {
                 New-Item -ItemType Directory -Path $WasmDir -Force | Out-Null
+            }
+            # freshly built files will not match an older checksum list
+            $oldSums = Join-Path $WasmDir 'SHA256SUMS.txt'
+            if (Test-Path -LiteralPath $oldSums) {
+                Remove-Item -LiteralPath $oldSums -Force
             }
         }
         $builds = @(

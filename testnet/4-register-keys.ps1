@@ -20,6 +20,10 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'lib.ps1')
+if ($DryRun -and -not $env:TERRA_STATE_FILE) {
+    # a dry run never touches the real state file
+    $Script:StateFile = Join-Path $PSScriptRoot 'state.dry-run.json'
+}
 
 Start-Log -Name '4-register-keys' | Out-Null
 
@@ -29,11 +33,11 @@ if ($null -eq $state) {
 }
 
 if (-not $KeysDir) {
-    $home = $env:USERPROFILE
-    if (-not $home) {
-        $home = $env:HOME
+    $userHome = $env:USERPROFILE
+    if (-not $userHome) {
+        $userHome = $env:HOME
     }
-    $KeysDir = Join-Path $home '.terra-testnet\keys'
+    $KeysDir = Join-Path (Join-Path $userHome '.terra-testnet') 'keys'
 }
 
 function Resolve-KeysTool {
@@ -71,13 +75,13 @@ function Invoke-KeysTool {
         $all = @('run', '-q', '-p', 'terra-keys', '--') + $ToolArgs
         if ($DryRun) {
             Write-Host "[dry-run] cargo $($all -join ' ')"
-            return [PSCustomObject]@{ ExitCode = 0; StdOut = '{"public_key_hex":"00"}'; StdErr = '' }
+            return [PSCustomObject]@{ ExitCode = 0; StdOut = ('{"public_key_hex":"' + ('0' * 64) + '"}'); StdErr = '' }
         }
         return Invoke-Native -FilePath $cargo -ArgumentList $all
     }
     if ($DryRun) {
         Write-Host "[dry-run] terra-keys $($ToolArgs -join ' ')"
-        return [PSCustomObject]@{ ExitCode = 0; StdOut = '{"public_key_hex":"00"}'; StdErr = '' }
+        return [PSCustomObject]@{ ExitCode = 0; StdOut = ('{"public_key_hex":"' + ('0' * 64) + '"}'); StdErr = '' }
     }
     return Invoke-Native -FilePath $tool -ArgumentList $ToolArgs
 }
@@ -113,7 +117,7 @@ foreach ($t in $traders) {
     if ($env:OS -eq 'Windows_NT' -and -not $DryRun) {
         $user = $env:USERNAME
         $icacls = Join-Path $env:SystemRoot 'System32\icacls.exe'
-        & $icacls $keyPath '/inheritance:r' "/grant:r$($user):(R,W)" | Out-Null
+        & $icacls $keyPath '/inheritance:r' '/grant:r' ($user + ':(R,W)') | Out-Null
     }
     Invoke-Near -NearArgs @(
         'contract', 'call-function', 'as-transaction', $state.escrow_account, 'register_key', 'json-args', "{`"public_key_hex`":`"$hex`"}",

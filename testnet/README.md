@@ -1,12 +1,12 @@
 # Testnet run kit (steps 1-5)
 
-PowerShell scripts to prepare the escrow contract and test tokens on NEAR **testnet**. For the contract rules, see `docs/ESCROW.md`. **Untested on a live network** — run these scripts yourself when ready.
+PowerShell scripts to prepare the escrow contract and test tokens on NEAR **testnet**. For the contract rules, see `docs/ESCROW.md`. **Untested on a live network.** The scripts were run only against a local simulator of near-cli-rs and of the RPC (command forms and JSON arguments checked); the first live run is yours. They send transactions only when you start them.
 
 ## Prerequisites
 
 - Windows PowerShell 5.1 or newer
 - [near-cli-rs](https://github.com/near/near-cli-rs): `irm https://github.com/near/near-cli-rs/releases/latest/download/near-cli-rs-installer.ps1 | iex`
-- WASM files `escrow.wasm` and `terra_test_token.wasm` under `testnet\wasm\` (build with `2-check-wasm.ps1 -Build` when Rust and target `wasm32-unknown-unknown` are installed, or copy artifacts in manually)
+- WASM files `escrow.wasm` and `terra_test_token.wasm` under `testnet\wasm\` (prebuilt copies with `SHA256SUMS.txt` can be dropped in; or build with `2-check-wasm.ps1 -Build` when Rust and target `wasm32-unknown-unknown` are installed, or copy artifacts in manually)
 - `terra-keys` at `testnet\bin\terra-keys.exe`, on `PATH`, or Rust to run `cargo run -q -p terra-keys --`
 
 Optional environment variables: `TERRA_RPC_URL`, `TERRA_STATE_FILE`, `TERRA_NEAR_BIN`.
@@ -42,7 +42,7 @@ Do deploy escrow and both token contracts, then call `new` in separate transacti
 .\3-deploy.ps1
 ```
 
-You should see `NEXT: run 4-register-keys.ps1` after view checks (`ft_metadata` symbols, Alice `get_key` is null).
+You should see `NEXT: run 4-register-keys.ps1` after the view checks (`ft_metadata` symbols of both tokens, the escrow answers `get_key`). A second run skips contracts that are already deployed (`-Force` redeploys the code and keeps the state).
 
 ## Step 4 — Register order keys
 
@@ -84,7 +84,7 @@ Use `-DryRun` on any script to print `near` commands without sending transaction
 - NEAR account keys: Windows keychain via near-cli-rs
 - Order keys: `*.order-key` under `%USERPROFILE%\.terra-testnet\keys` by default — back them up; never commit them
 - Scripts refuse the word `mainnet` in `near` argument lists
-- Logs and console output redact `ed25519:…`, seed phrases, and 64-hex secrets after `--key` / `seed`
+- Logs and console output redact `ed25519:` keys, seed-phrase and secret-key lines, and the paths of `*.order-key` files; no script prints or logs key file contents
 
 Logs: `testnet\logs\`. State (public IDs and key hex only): `testnet\state.json`.
 

@@ -20,6 +20,10 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'lib.ps1')
+if ($DryRun -and -not $env:TERRA_STATE_FILE) {
+    # a dry run never touches the real state file
+    $Script:StateFile = Join-Path $PSScriptRoot 'state.dry-run.json'
+}
 
 Start-Log -Name '3-deploy' | Out-Null
 
@@ -49,14 +53,16 @@ $tokenBytes = (Get-WasmSizeBytes -WasmDir $WasmDir -FileName 'terra_test_token.w
 $escrowMin = [math]::Round($escrowBytes * 0.00001 + 1, 4)
 $tokenMin = [math]::Round($tokenBytes * 0.00001 + 1, 4)
 
-$escrowBal = Get-NearBalance -AccountId $escrow
-if ($escrowBal -lt $escrowMin) {
-    throw "escrow account needs at least $escrowMin NEAR (has $escrowBal)"
-}
-foreach ($pair in @(@{ Id = $base; Min = $tokenMin }, @{ Id = $quote; Min = $tokenMin })) {
-    $bal = Get-NearBalance -AccountId $pair.Id
-    if ($bal -lt $pair.Min) {
-        throw "$($pair.Id) needs at least $($pair.Min) NEAR (has $bal)"
+if (-not $DryRun) {
+    $escrowBal = Get-NearBalance -AccountId $escrow
+    if ($escrowBal -lt $escrowMin) {
+        throw "escrow account needs at least $escrowMin NEAR (has $escrowBal)"
+    }
+    foreach ($pair in @(@{ Id = $base; Min = $tokenMin }, @{ Id = $quote; Min = $tokenMin })) {
+        $bal = Get-NearBalance -AccountId $pair.Id
+        if ($bal -lt $pair.Min) {
+            throw "$($pair.Id) needs at least $($pair.Min) NEAR (has $bal)"
+        }
     }
 }
 
@@ -94,10 +100,8 @@ if (-not $DryRun) {
     if ($null -eq $quoteMeta -or $quoteMeta.symbol -ne 'TQUOTE') {
         throw 'quote token ft_metadata symbol check failed'
     }
-    $aliceKey = Invoke-View -Contract $escrow -Method 'get_key' -ArgsObject @{ account_id = $state.alice_account } -DryRun:$false
-    if ($null -ne $aliceKey) {
-        throw 'expected alice get_key to be null before register-keys step'
-    }
+    # the escrow must answer a view call (the value depends on whether step 4 already ran)
+    [void](Invoke-View -Contract $escrow -Method 'get_key' -ArgsObject @{ account_id = $state.alice_account } -DryRun:$false)
 }
 
 Write-Host 'NEXT: run 4-register-keys.ps1'
