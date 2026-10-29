@@ -12,7 +12,10 @@ pub fn reference_check(
     quote: &QuoteResponse,
     tolerance_bps: u32,
 ) -> Result<ReferenceCheck, ReferenceCheckError> {
-    let q = quote.quote.as_ref().ok_or(ReferenceCheckError::MissingQuote)?;
+    let q = quote
+        .quote
+        .as_ref()
+        .ok_or(ReferenceCheckError::MissingQuote)?;
     let amount_out_str = q
         .amount_out
         .as_ref()

@@ -13,7 +13,7 @@ Non-custodial matcher interface and a public in-memory stub for a NEAR Intents e
 {"ack":{"id":"s1","status":"accepted","filled_lots":0,"resting_lots":5,"cancelled_lots":0}}
 {"ack":{"id":"b1","status":"accepted","filled_lots":5,"resting_lots":0,"cancelled_lots":0}}
 {"fill":{"seq":1,"market_id":"NEAR-USDC","taker_id":"b1","maker_id":"s1","taker_account":"bob.test","maker_account":"alice.test","taker_side":"buy","price_ticks":100,"qty_lots":5}}
-{"settlement":{"fill_seq":1,"buyer":"bob.test","seller":"alice.test","buyer_draft":{"signer_id":"bob.test","deadline":"2030-01-01T00:00:00Z","intents":[{"intent":"token_diff","diff":{"nep141:wrap.near":"5","nep141:usdc.near":"-500"}}]},"seller_draft":{"signer_id":"alice.test","deadline":"2030-01-01T00:00:00Z","intents":[{"intent":"token_diff","diff":{"nep141:wrap.near":"-5","nep141:usdc.near":"500"}}]}}}
+{"settlement":{"fill_seq":1,"buyer":"bob.test","seller":"alice.test","buyer_draft":{"signer_id":"bob.test","deadline":"2030-01-01T00:00:00Z","intents":[{"intent":"token_diff","diff":{"nep141:usdc.near":"-500","nep141:wrap.near":"5"}}]},"seller_draft":{"signer_id":"alice.test","deadline":"2030-01-01T00:00:00Z","intents":[{"intent":"token_diff","diff":{"nep141:usdc.near":"500","nep141:wrap.near":"-5"}}]}}}
 ```
 
 3. Read `docs/SPEC.md` for message formats, matching rules, and settlement mapping. See `docs/INTENTS_FACTS.md` for verifier and 1Click quote field notes.

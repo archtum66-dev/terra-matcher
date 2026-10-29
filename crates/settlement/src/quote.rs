@@ -54,6 +54,8 @@ pub struct QuoteRequest {
 }
 
 impl QuoteRequest {
+    /// Private constructor: the only way to build a request, and `dry` is always `true`.
+    #[allow(clippy::too_many_arguments)]
     fn with_dry_true(
         swap_type: SwapType,
         slippage_tolerance: u32,
@@ -302,7 +304,9 @@ impl Transport for FixtureTransport {
         if let Some(ref r) = self.default {
             return Ok(r.clone());
         }
-        Err(TransportError::RequestFailed(format!("no fixture for {url}")))
+        Err(TransportError::RequestFailed(format!(
+            "no fixture for {url}"
+        )))
     }
 }
 
@@ -397,7 +401,8 @@ pub fn reference_quote_request(
     if fill.market_id != market.market_id {
         return Err(crate::error::SettlementError::MarketIdMismatch);
     }
-    let base = base_amount(market, fill.qty_lots).ok_or(crate::error::SettlementError::AmountOverflow)?;
+    let base =
+        base_amount(market, fill.qty_lots).ok_or(crate::error::SettlementError::AmountOverflow)?;
     Ok(QuoteRequest::with_dry_true(
         SwapType::ExactInput,
         slippage_bps,
@@ -455,9 +460,9 @@ impl Transport for HttpTransport {
         match req.send_string(body) {
             Ok(resp) => {
                 let status = resp.status();
-                let body = resp.into_string().map_err(|e| {
-                    TransportError::RequestFailed(format!("read body: {e}"))
-                })?;
+                let body = resp
+                    .into_string()
+                    .map_err(|e| TransportError::RequestFailed(format!("read body: {e}")))?;
                 Ok(TransportResponse { status, body })
             }
             Err(ureq::Error::Status(code, resp)) => {
@@ -465,10 +470,7 @@ impl Transport for HttpTransport {
                     Ok(s) => s,
                     Err(e) => return Err(TransportError::RequestFailed(format!("read body: {e}"))),
                 };
-                Ok(TransportResponse {
-                    status: code,
-                    body,
-                })
+                Ok(TransportResponse { status: code, body })
             }
             Err(e) => Err(TransportError::RequestFailed(e.to_string())),
         }
@@ -499,8 +501,9 @@ mod tests {
             price_ticks: 10,
             qty_lots: 2,
         };
-        let ref_req = reference_quote_request(&market, &fill, "alice.test", "2030-01-01T00:00:00Z", 50)
-            .expect("ref");
+        let ref_req =
+            reference_quote_request(&market, &fill, "alice.test", "2030-01-01T00:00:00Z", 50)
+                .expect("ref");
         let fund_req = funding_quote_request(
             "nep141:eth.bridge",
             "nep141:usdc.near",
@@ -512,19 +515,14 @@ mod tests {
         );
         for req in [ref_req, fund_req] {
             let json = serde_json::to_string(&req).expect("serialize");
-            assert!(
-                json.contains("\"dry\":true"),
-                "expected dry true in {json}"
-            );
+            assert!(json.contains("\"dry\":true"), "expected dry true in {json}");
         }
     }
 
     #[test]
     fn recording_transport_captures_dry_body() {
-        let fixture = FixtureTransport::new().with_default(
-            200,
-            include_str!("../../tests/fixtures/quote_dry_ok.json"),
-        );
+        let fixture = FixtureTransport::new()
+            .with_default(200, include_str!("../tests/fixtures/quote_dry_ok.json"));
         let recording = RecordingTransport::new(fixture);
         let client = QuoteClient::new(recording);
         let req = funding_quote_request(
@@ -553,14 +551,20 @@ mod tests {
             "2030-01-01T00:00:00Z",
             50,
         );
-        let t400 = FixtureTransport::new()
-            .with_response(QUOTE_URL, 400, include_str!("../../tests/fixtures/quote_error_400.json"));
+        let t400 = FixtureTransport::new().with_response(
+            QUOTE_URL,
+            400,
+            include_str!("../tests/fixtures/quote_error_400.json"),
+        );
         assert!(matches!(
             QuoteClient::new(t400).quote(&req),
             Err(QuoteError::InvalidInput(_))
         ));
-        let t401 = FixtureTransport::new()
-            .with_response(QUOTE_URL, 401, include_str!("../../tests/fixtures/quote_error_401.json"));
+        let t401 = FixtureTransport::new().with_response(
+            QUOTE_URL,
+            401,
+            include_str!("../tests/fixtures/quote_error_401.json"),
+        );
         assert!(matches!(
             QuoteClient::new(t401).quote(&req),
             Err(QuoteError::InvalidApiKey(_))

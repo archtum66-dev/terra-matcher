@@ -19,8 +19,8 @@ pub fn settle_fill(
     }
 
     let base = base_amount(market, fill.qty_lots).ok_or(SettlementError::AmountOverflow)?;
-    let quote =
-        quote_amount(market, fill.qty_lots, fill.price_ticks).ok_or(SettlementError::AmountOverflow)?;
+    let quote = quote_amount(market, fill.qty_lots, fill.price_ticks)
+        .ok_or(SettlementError::AmountOverflow)?;
 
     if base > I128_MAX_U128 || quote > I128_MAX_U128 {
         return Err(SettlementError::AmountExceedsI128);
@@ -72,16 +72,19 @@ pub fn verify_pair(pair: &SettlementPair) -> Result<(), SettlementError> {
 
     for draft in [&pair.buyer_draft, &pair.seller_draft] {
         for intent in &draft.intents {
-            if let Intent::TokenDiff { diff } = intent {
-                for (token, amount_str) in diff {
-                    let parsed = parse_intent_amount(amount_str)
-                        .ok_or_else(|| SettlementError::InvalidIntentAmount {
-                            token: token.clone(),
+            match intent {
+                Intent::TokenDiff { diff } => {
+                    for (token, amount_str) in diff {
+                        let parsed = parse_intent_amount(amount_str).ok_or_else(|| {
+                            SettlementError::InvalidIntentAmount {
+                                token: token.clone(),
+                            }
                         })?;
-                    let entry = sums.entry(token.clone()).or_insert(0);
-                    *entry = entry
-                        .checked_add(parsed)
-                        .ok_or(SettlementError::AmountOverflow)?;
+                        let entry = sums.entry(token.clone()).or_insert(0);
+                        *entry = entry
+                            .checked_add(parsed)
+                            .ok_or(SettlementError::AmountOverflow)?;
+                    }
                 }
             }
         }

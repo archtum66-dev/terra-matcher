@@ -1,2 +1,2 @@
-{"type":"order","id":"s1","account":"alice.near","side":"sell","price_ticks":100,"qty_lots":5,"tif":"gtc"}
-{"type":"order","id":"b1","account":"bob.near","side":"buy","price_ticks":100,"qty_lots":5,"tif":"gtc"}
+{"type":"order","id":"s1","account":"alice.test","side":"sell","price_ticks":100,"qty_lots":5,"tif":"gtc"}
+{"type":"order","id":"b1","account":"bob.test","side":"buy","price_ticks":100,"qty_lots":5,"tif":"gtc"}

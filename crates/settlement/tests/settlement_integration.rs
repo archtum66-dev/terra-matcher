@@ -1,7 +1,6 @@
 use matcher_api::{base_amount, quote_amount, Market, Side};
 use settlement::{
-    settle_fill, verify_pair, FixtureTransport, QuoteClient, QuoteError, SettlementError,
-    QUOTE_URL,
+    settle_fill, verify_pair, FixtureTransport, QuoteClient, QuoteError, SettlementError, QUOTE_URL,
 };
 
 #[test]
@@ -25,10 +24,8 @@ fn golden_settlement_simple() {
         qty_lots: 5,
     };
     let pair = settle_fill(&market, &fill, "2030-01-01T00:00:00Z").expect("settle");
-    let expected: settlement::SettlementPair = serde_json::from_str(include_str!(
-        "fixtures/settlement_simple.json"
-    ))
-    .expect("fixture");
+    let expected: settlement::SettlementPair =
+        serde_json::from_str(include_str!("fixtures/settlement_simple.json")).expect("fixture");
     assert_eq!(pair, expected);
 }
 
@@ -44,11 +41,11 @@ fn random_fills_verify_balanced() {
     let mut state: u64 = 0xDEAD_BEEF_CAFE_BABE;
     for i in 0..2000 {
         state = xorshift64star(state);
-        let qty_lots = (state % 1000 + 1) as u64;
+        let qty_lots = state % 1000 + 1;
         state = xorshift64star(state);
-        let price_ticks = (state % 10_000 + 1) as u64;
+        let price_ticks = state % 10_000 + 1;
         state = xorshift64star(state);
-        let taker_side = if state % 2 == 0 {
+        let taker_side = if state & 1 == 0 {
             Side::Buy
         } else {
             Side::Sell
@@ -147,7 +144,7 @@ fn settle_errors() {
 }
 
 #[test]
-    fn intent_json_field_names() {
+fn intent_json_field_names() {
     let market = Market {
         market_id: "M".to_string(),
         base_token: "nep141:base".to_string(),

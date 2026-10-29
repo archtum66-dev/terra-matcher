@@ -8,8 +8,10 @@ use std::process;
 
 use matcher_api::{quote_amount, Ack, Fill, Market, Matcher, Message};
 use matcher_stub::StubMatcher;
-use settlement::{reference_check, settle_fill, QuoteClient, QuoteRequest, QuoteResponse, SettlementPair};
 use serde::Serialize;
+use settlement::{reference_check, settle_fill, QuoteResponse, SettlementPair};
+#[cfg(feature = "http")]
+use settlement::{QuoteClient, QuoteRequest};
 
 /// Fixed example deadline (no wall clock).
 pub const DEFAULT_SETTLEMENT_DEADLINE: &str = "2030-01-01T00:00:00Z";
@@ -106,7 +108,7 @@ fn run_settle(market_path: &str, orders_path: &str, opts: SettleOptions) -> Resu
         let pair = settle_fill(market, fill, &opts.deadline)
             .map_err(|e| format!("settle fill {}: {e}", fill.seq))?;
 
-        let ref_check = if let (Some(ref q), Some(quote_amt)) = (
+        let ref_check = if let (Some(q), Some(quote_amt)) = (
             reference.as_ref(),
             quote_amount(market, fill.qty_lots, fill.price_ticks),
         ) {
@@ -212,8 +214,7 @@ fn run_quote(file_path: &str) -> Result<(), String> {
         serde_json::from_str(&data).map_err(|e| format!("parse request: {e}"))?;
     let api_key = env::var("ONECLICK_API_KEY")
         .map_err(|_| "ONECLICK_API_KEY environment variable not set".to_string())?;
-    let client =
-        QuoteClient::new(settlement::HttpTransport).with_api_key(api_key);
+    let client = QuoteClient::new(settlement::HttpTransport).with_api_key(api_key);
     let resp = client
         .quote(&req)
         .map_err(|e| format!("quote failed: {e}"))?;

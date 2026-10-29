@@ -1,26 +1,27 @@
-use serde_json::{json, Value};
+use serde_json::json;
 
 use crate::intent::IntentDraft;
 
 /// Builds the NEP-413 wallet message JSON string.
 ///
 /// UNVERIFIED against a live verifier.
-pub fn nep413_message(draft: &IntentDraft) -> String {
+pub fn nep413_message(draft: &IntentDraft) -> Result<String, serde_json::Error> {
     let value = json!({
         "signer_id": draft.signer_id,
         "deadline": draft.deadline,
         "intents": draft.intents,
     });
-    match serde_json::to_string(&value) {
-        Ok(s) => s,
-        Err(_) => String::new(),
-    }
+    serde_json::to_string(&value)
 }
 
 /// Builds the raw_ed25519 payload JSON string.
 ///
 /// UNVERIFIED against a live verifier.
-pub fn raw_payload(draft: &IntentDraft, verifying_contract: &str, nonce_b64: &str) -> String {
+pub fn raw_payload(
+    draft: &IntentDraft,
+    verifying_contract: &str,
+    nonce_b64: &str,
+) -> Result<String, serde_json::Error> {
     let value = json!({
         "signer_id": draft.signer_id,
         "verifying_contract": verifying_contract,
@@ -28,10 +29,7 @@ pub fn raw_payload(draft: &IntentDraft, verifying_contract: &str, nonce_b64: &st
         "nonce": nonce_b64,
         "intents": draft.intents,
     });
-    match serde_json::to_string(&value) {
-        Ok(s) => s,
-        Err(_) => String::new(),
-    }
+    serde_json::to_string(&value)
 }
 
 const BASE64_ALPHABET: &[u8; 64] =
@@ -75,6 +73,7 @@ fn encode_base64(input: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::Value;
     use std::collections::BTreeMap;
 
     use crate::intent::{Intent, IntentDraft};
@@ -115,9 +114,23 @@ mod tests {
                 diff: BTreeMap::new(),
             }],
         };
-        let msg = nep413_message(&draft);
+        let msg = nep413_message(&draft).expect("message");
         let v: Value = serde_json::from_str(&msg).expect("json");
         assert_eq!(v["signer_id"], "alice.test");
         assert!(v.get("intents").is_some());
+    }
+
+    #[test]
+    fn raw_payload_contains_contract_and_nonce() {
+        let draft = IntentDraft {
+            signer_id: "alice.test".to_string(),
+            deadline: "2030-01-01T00:00:00Z".to_string(),
+            intents: vec![],
+        };
+        let payload = raw_payload(&draft, "intents.near", "bm9uY2U=").expect("payload");
+        let v: Value = serde_json::from_str(&payload).expect("json");
+        assert_eq!(v["verifying_contract"], "intents.near");
+        assert_eq!(v["nonce"], "bm9uY2U=");
+        assert_eq!(v["signer_id"], "alice.test");
     }
 }
