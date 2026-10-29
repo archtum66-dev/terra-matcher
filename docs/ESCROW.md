@@ -36,9 +36,9 @@ Canonical JSON (fields in exactly this order, no whitespace, strings for 128-bit
 
 | Method | Who | What |
 |---|---|---|
-| `ft_on_transfer(sender_id, amount, msg)` | token contract | credits the sender's free balance of the calling token; returns `"0"` |
+| `ft_on_transfer(sender_id, amount, msg)` | token contract | credits the sender's free balance of the calling token; returns `"0"` (the amount not used, always zero) |
 | `register_key(public_key_hex)` | the trader (predecessor) | sets the trader's order key (32 bytes, 64 hex characters); replaces an earlier key |
-| `withdraw(token_id, amount, receiver_id?)` | the trader, 1 yoctoNEAR attached | debits first, then `ft_transfer`; if the transfer fails the callback credits the amount back |
+| `withdraw(token_id, amount, receiver_id?)` | the trader, 1 yoctoNEAR attached | debits first, then `ft_transfer` (30 Tgas) and a private callback (10 Tgas); if the transfer fails the callback credits the amount back and logs `withdraw_refund`. Attach at least 60 Tgas. |
 | `settle(buy, sell, fill_lots, price_ticks)` | anyone | see section 3 |
 | `cancel_order(order_hash)` | the trader | marks that hash cancelled for the caller |
 | `balance_of(account_id, token_id)` | view | free balance |
@@ -65,7 +65,7 @@ Effects: buyer `-quote_amount` quote, `+base_amount` base; seller `+quote_amount
 
 `EVENT_JSON:{"standard":"terra_escrow","version":"0.1.0","event":"fill","data":{"buy_hash":"..","sell_hash":"..","buyer":"..","seller":"..","fill_lots":5,"price_ticks":100,"base_amount":"..","quote_amount":".."}}`
 
-Further events: `deposit`, `withdraw`, `cancel`, `key_registered`.
+Further events: `deposit`, `withdraw`, `withdraw_refund`, `cancel`, `key_registered`.
 
 ## 5 What the operator can and cannot do
 
@@ -75,4 +75,4 @@ Further events: `deposit`, `withdraw`, `cancel`, `key_registered`.
 | choose the fill price inside both limits | fill an expired, cancelled or overfilled order |
 | stay offline: traders withdraw and cancel on their own | withdraw anyone's balance |
 
-**Known limits of v0.1:** storage costs are paid by the contract account (a fee model is not built); a fill price anywhere inside the limit range is allowed (price-time fairness is the matcher's job, not the contract's); no upgrade path, no admin key. Testnet only. Not audited.
+**Known limits of v0.1:** storage costs are paid by the contract account (a fee model is not built); a fill price anywhere inside the limit range is allowed (price-time fairness is the matcher's job, not the contract's); no upgrade path, no admin key; the contract does not check `price_ticks > 0` or `qty_lots > 0` of an order (a zero-quantity order can never fill, a zero price is the signer's own choice); anyone can add state entries (for example by calling `cancel_order` with arbitrary hashes) at the cost of the contract's NEAR balance, and `withdraw` should keep working in that case because it only overwrites existing entries; gas values for `withdraw` are estimates. Testnet only. Not audited. Unit-tested only, not yet run on a live network.

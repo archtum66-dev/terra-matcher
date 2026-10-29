@@ -31,6 +31,8 @@ cargo build --target wasm32-unknown-unknown --release
 
 Artifact path depends on the tool (typically `target/near/escrow.wasm` or `target/wasm32-unknown-unknown/release/escrow.wasm`).
 
+The plain `cargo build` variant was built in the drafting environment (about 360 KB); `cargo near build` was not run.
+
 ## 3. Deploy
 
 Do deploy to `<ESCROW_ACCOUNT>`, see NEAR CLI `deploy` help.
@@ -68,14 +70,14 @@ Deposit quote token for the buyer and base token for the seller before settling.
 Do submit matching signed orders (`buy`, `sell`, `fill_lots`, `price_ticks`), see `docs/ESCROW.md` section 3. JSON shapes come from `docs/ESCROW.md` section 1.
 
 ```bash
-near contract call-function as-transaction <ESCROW_ACCOUNT> settle json-args '{"buy":{"order":{...},"signature":"<128_HEX>"},"sell":{"order":{...},"signature":"<128_HEX>"},"fill_lots":5,"price_ticks":100}' prepaid-gas '300 Tgas' attached-deposit '0 NEAR' sign-as <ANY_ACCOUNT> network-config testnet sign-with-keychain send
+near contract call-function as-transaction <ESCROW_ACCOUNT> settle json-args '{"buy":{"order":{...},"signature":"<128_HEX>"},"sell":{"order":{...},"signature":"<128_HEX>"},"fill_lots":5,"price_ticks":100}' prepaid-gas '100 Tgas' attached-deposit '0 NEAR' sign-as <ANY_ACCOUNT> network-config testnet sign-with-keychain send
 ```
 
 Anyone may call `settle`; signatures must verify against each trader's registered key.
 
 ## 7. Withdraw free balance
 
-Do attach **1 yoctoNEAR** and call `withdraw`, see `docs/ESCROW.md` section 2.
+Do attach **1 yoctoNEAR** and call `withdraw`, see `docs/ESCROW.md` section 2. `withdraw` forwards 30 Tgas to the token's `ft_transfer` and 10 Tgas to its own callback, so attach at least 60 Tgas. These values are estimates; adjust them after the first live run.
 
 ```bash
 near contract call-function as-transaction <ESCROW_ACCOUNT> withdraw json-args '{"token_id":"<QUOTE_TOKEN>","amount":"<AMOUNT>","receiver_id":null}' prepaid-gas '100 Tgas' attached-deposit '1 yoctoNEAR' sign-as <ALICE> network-config testnet sign-with-keychain send
@@ -89,7 +91,7 @@ On a successful fill, the contract logs a NEP-297 style line (see `docs/ESCROW.m
 EVENT_JSON:{"standard":"terra_escrow","version":"0.1.0","event":"fill","data":{"buy_hash":"<hex>","sell_hash":"<hex>","buyer":"<ALICE>","seller":"<BOB>","fill_lots":5,"price_ticks":100,"base_amount":"<string>","quote_amount":"<string>"}}
 ```
 
-Deposits, withdrawals, cancellations, and key registration emit `deposit`, `withdraw`, `cancel`, and `key_registered` events with the same `EVENT_JSON:` prefix.
+Deposits, withdrawals, cancellations, key registration and refunds of failed withdrawals emit `deposit`, `withdraw`, `cancel`, `key_registered` and `withdraw_refund` events with the same `EVENT_JSON:` prefix.
 
 ## Views
 

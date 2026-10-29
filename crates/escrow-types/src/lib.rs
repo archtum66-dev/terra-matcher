@@ -84,28 +84,26 @@ pub fn fill_amounts(order: &Order, fill_lots: u64, price_ticks: u64) -> Option<(
     let qty = u128::from(fill_lots);
     let base = qty.checked_mul(order.lot_size_base)?;
     let price = u128::from(price_ticks);
-    let quote = qty.checked_mul(price)?.checked_mul(order.quote_per_tick_lot)?;
+    let quote = qty
+        .checked_mul(price)?
+        .checked_mul(order.quote_per_tick_lot)?;
     Some((base, quote))
 }
 
 #[cfg(feature = "hash")]
-pub fn order_hash(order: &Order) -> [u8; 32] {
+pub fn order_hash(order: &Order) -> Result<[u8; 32], String> {
     use sha2::{Digest, Sha256};
-    let Ok(bytes) = canonical_bytes(order) else {
-        return [0u8; 32];
-    };
+    let bytes = canonical_bytes(order)?;
     let digest = Sha256::digest(bytes);
     let mut out = [0u8; 32];
     out.copy_from_slice(&digest);
-    out
+    Ok(out)
 }
 
 #[cfg(feature = "hash")]
-pub fn order_hash_hex(order: &Order) -> String {
-    order_hash(order)
-        .iter()
-        .map(|byte| format!("{:02x}", byte))
-        .collect()
+pub fn order_hash_hex(order: &Order) -> Result<String, String> {
+    let hash = order_hash(order)?;
+    Ok(hash.iter().map(|byte| format!("{byte:02x}")).collect())
 }
 
 #[cfg(test)]
@@ -174,5 +172,17 @@ mod tests {
             let quote = quote_amount(&market, fill_lots, price_ticks);
             assert_eq!(got, base.zip(quote));
         }
+    }
+
+    #[cfg(feature = "hash")]
+    #[test]
+    fn order_hash_is_sha256_of_canonical_bytes() {
+        let order = example_order();
+        let hex = order_hash_hex(&order).expect("hash");
+        assert_eq!(hex.len(), 64);
+        assert_eq!(order_hash(&order).expect("hash").len(), 32);
+        let mut other = example_order();
+        other.nonce = 2;
+        assert_ne!(hex, order_hash_hex(&other).expect("hash"));
     }
 }

@@ -2,7 +2,7 @@
 
 Non-custodial matcher interface and a public in-memory stub for a NEAR Intents exchange. The matcher pairs limit orders off-chain; it never holds funds. Settlement builds unsigned `token_diff` intent pairs for the NEAR Intents verifier.
 
-**Status:** Early scaffold — types, conformance vectors, reference stub, settlement mapping, dry quote client, and a dry-run CLI.
+**Status:** Early scaffold — types, conformance vectors, reference stub, settlement mapping, dry quote client, a dry-run CLI, and an escrow contract for NEAR testnet (unit-tested only, not deployed).
 
 ## Quick start
 
@@ -31,10 +31,13 @@ Each fill produces exactly one **pair** of unsigned `token_diff` intent drafts (
 
 ## Escrow contract
 
-The NEAR testnet escrow holds NEP-141 deposits as free balances, verifies ed25519-signed limit orders, and applies fills when anyone calls `settle`. Rules, error strings, and events are defined in `docs/ESCROW.md`. For a manual testnet checklist (placeholders only), see `docs/TESTNET.md`.
+The NEAR testnet escrow holds NEP-141 deposits as free balances, verifies ed25519-signed limit orders, and applies fills when anyone calls `settle`. Rules, error strings, and events are defined in `docs/ESCROW.md`. A manual testnet checklist (placeholders only) is in `docs/TESTNET.md`.
 
-1. Run `cargo test --all` from the repository root — runs matcher, settlement, and `escrow-types` tests (requires Rust; not run in the agent environment that drafted this section).
-2. Run `cd contract/escrow && cargo test` — runs escrow unit tests with `near_sdk::test_utils` (same Rust requirement).
+**State:** builds to wasm (about 360 KB) and passes 26 unit tests. **Not deployed, not tested on a live network, not audited.**
+
+1. `cargo test --all` (repository root) runs the matcher, settlement and `escrow-types` tests. `cargo test -p escrow-types --features hash` adds the order-hash test.
+2. `cd contract/escrow && cargo test` runs the contract unit tests (the contract has its own Cargo workspace).
+3. `cd contract/escrow && cargo build --target wasm32-unknown-unknown --release` builds the contract (needs the `wasm32-unknown-unknown` Rust target).
 
 ## Crates
 
@@ -49,11 +52,12 @@ The NEAR testnet escrow holds NEP-141 deposits as free balances, verifies ed2551
 ## Not here yet
 
 - Hosted demo
+- Escrow deployed and exercised on a live testnet
 - Live verifier or 1Click integration in default builds (use `settlement` / `terra-cli` `http` feature only when you intentionally call the public quote API with `ONECLICK_API_KEY`)
 
 ## Limits
 
-Quote and settlement fixtures are hand-written from public documentation, not recorded from a live system. Wallet message JSON shapes are marked `UNVERIFIED` in code until checked against `intents.near`.
+Quote and settlement fixtures are hand-written from public documentation, not recorded from a live system. Wallet message JSON shapes are marked `UNVERIFIED` in code until checked against `intents.near`. The escrow contract has unit tests only; gas values for `withdraw` are estimates.
 
 ## AI assistance
 

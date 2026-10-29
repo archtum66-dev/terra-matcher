@@ -1,20 +1,26 @@
 #![forbid(unsafe_code)]
 
 use escrow_types::{canonical_bytes, fill_amounts, Order, Side, SignedOrder};
-use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::json_types::U128;
 use near_sdk::store::{LookupMap, LookupSet};
 use near_sdk::{
     assert_one_yocto, env, ext_contract, near, AccountId, BorshStorageKey, Gas, NearToken,
-    PromiseResult,
+    PromiseError,
 };
 
+/// Gas for the token's `ft_transfer` during `withdraw` (to be tuned on a live network).
+const GAS_FT_TRANSFER: Gas = Gas::from_tgas(30);
+/// Gas for the `on_withdraw` callback.
+const GAS_ON_WITHDRAW: Gas = Gas::from_tgas(10);
+
 #[ext_contract(ext_ft)]
+#[allow(dead_code)]
 trait FungibleToken {
     fn ft_transfer(&mut self, receiver_id: AccountId, amount: U128, memo: Option<String>);
 }
 
-#[derive(BorshStorageKey, BorshSerialize, BorshDeserialize, Clone, Copy, Hash, PartialEq, Eq)]
+#[near(serializers = [borsh])]
+#[derive(BorshStorageKey)]
 enum EscrowStorageKey {
     Balances,
     Keys,
@@ -26,7 +32,6 @@ type BalanceKey = (AccountId, AccountId);
 type AccountHashKey = (AccountId, [u8; 32]);
 
 #[near(contract_state)]
-#[derive(BorshDeserialize, BorshSerialize)]
 pub struct Escrow {
     balances: LookupMap<BalanceKey, u128>,
     keys: LookupMap<AccountId, [u8; 32]>,
@@ -59,17 +64,12 @@ impl Escrow {
         Self::default()
     }
 
-    pub fn ft_on_transfer(
-        &mut self,
-        sender_id: AccountId,
-        amount: U128,
-        _msg: String,
-    ) -> String {
+    pub fn ft_on_transfer(&mut self, sender_id: AccountId, amount: U128, _msg: String) -> U128 {
         let token = env::predecessor_account_id();
         let credit = amount.0;
         self.credit_balance(&sender_id, &token, credit);
         log_deposit(&sender_id, &token, credit);
-        "0".to_string()
+        U128(0)
     }
 
     pub fn register_key(&mut self, public_key_hex: String) {
@@ -80,12 +80,7 @@ impl Escrow {
     }
 
     #[payable]
-    pub fn withdraw(
-        &mut self,
-        token_id: AccountId,
-        amount: U128,
-        receiver_id: Option<AccountId>,
-    ) {
+    pub fn withdraw(&mut self, token_id: AccountId, amount: U128, receiver_id: Option<AccountId>) {
         assert_one_yocto();
         let account = env::predecessor_account_id();
         let receiver = receiver_id.unwrap_or_else(|| account.clone());
@@ -94,11 +89,11 @@ impl Escrow {
         log_withdraw(&account, &token_id, amt, &receiver);
         let _promise = ext_ft::ext(token_id.clone())
             .with_attached_deposit(NearToken::from_yoctonear(1))
-            .with_static_gas(Gas::from_tgas(10))
+            .with_static_gas(GAS_FT_TRANSFER)
             .ft_transfer(receiver.clone(), amount, None)
             .then(
                 Self::ext(env::current_account_id())
-                    .with_static_gas(Gas::from_tgas(5))
+                    .with_static_gas(GAS_ON_WITHDRAW)
                     .on_withdraw(account, token_id, amount, receiver),
             );
     }
@@ -112,24 +107,14 @@ impl Escrow {
         _receiver_id: AccountId,
     ) {
         if env::promise_results_count() != 1 {
-            self.refund_failed_withdraw(account_id, token_id, amount);
+            self.refund_failed_withdraw(&account_id, &token_id, amount.0);
             return;
         }
-        match env::promise_result(0) {
-            PromiseResult::Successful(_) => {}
-            PromiseResult::Failed => {
-                self.refund_failed_withdraw(account_id, token_id, amount);
-            }
+        // Only a failed transfer is refunded. A successful transfer with a large
+        // return value (`TooLong`) must NOT be refunded, or the amount would be paid twice.
+        if let Err(PromiseError::Failed) = env::promise_result_checked(0, 64) {
+            self.refund_failed_withdraw(&account_id, &token_id, amount.0);
         }
-    }
-
-    pub fn refund_failed_withdraw(
-        &mut self,
-        account_id: AccountId,
-        token_id: AccountId,
-        amount: U128,
-    ) {
-        self.credit_balance(&account_id, &token_id, amount.0);
     }
 
     pub fn settle(
@@ -214,16 +199,16 @@ impl Escrow {
         self.filled
             .insert((sell_account.clone(), sell_hash), sell_filled + fill_lots);
 
-        log_fill(
-            &buy_hash,
-            &sell_hash,
-            &buy_account,
-            &sell_account,
+        log_fill(&FillEvent {
+            buy_hash: &buy_hash,
+            sell_hash: &sell_hash,
+            buyer: &buy_account,
+            seller: &sell_account,
             fill_lots,
             price_ticks,
             base_amount,
             quote_amount,
-        );
+        });
     }
 
     pub fn cancel_order(&mut self, order_hash: String) {
@@ -247,7 +232,7 @@ impl Escrow {
     }
 
     pub fn get_key(&self, account_id: AccountId) -> Option<String> {
-        self.keys.get(&account_id).map(|pk| bytes32_to_hex(pk))
+        self.keys.get(&account_id).map(bytes32_to_hex)
     }
 }
 
@@ -272,6 +257,12 @@ impl Escrow {
         }
         let key = (account.clone(), token.clone());
         self.balances.insert(key, current - amount);
+    }
+
+    /// Internal only. Must never be exported: it credits a balance without any check.
+    fn refund_failed_withdraw(&mut self, account: &AccountId, token: &AccountId, amount: u128) {
+        self.credit_balance(account, token, amount);
+        log_refund(account, token, amount);
     }
 
     fn ensure_balance(&self, account: &AccountId, token: &AccountId, need: u128) {
@@ -318,14 +309,15 @@ fn validate_same_market(buy: &Order, sell: &Order) {
 }
 
 fn parse_account(raw: &str) -> AccountId {
-    raw.parse().unwrap_or_else(|_| env::panic_str("wrong_contract"))
+    raw.parse()
+        .unwrap_or_else(|_| env::panic_str("wrong_contract"))
 }
 
 fn hash_order(order: &Order) -> [u8; 32] {
     let Ok(bytes) = canonical_bytes(order) else {
         env::panic_str("amount_overflow");
     };
-    env::sha256(&bytes)
+    env::sha256_array(&bytes)
 }
 
 fn verify_registered_and_signature(
@@ -392,6 +384,12 @@ fn log_withdraw(account: &AccountId, token: &AccountId, amount: u128, receiver: 
     ));
 }
 
+fn log_refund(account: &AccountId, token: &AccountId, amount: u128) {
+    env::log_str(&format!(
+        "EVENT_JSON:{{\"standard\":\"terra_escrow\",\"version\":\"0.1.0\",\"event\":\"withdraw_refund\",\"data\":{{\"account\":\"{account}\",\"token\":\"{token}\",\"amount\":\"{amount}\"}}}}"
+    ));
+}
+
 fn log_key_registered(account: &AccountId) {
     env::log_str(&format!(
         "EVENT_JSON:{{\"standard\":\"terra_escrow\",\"version\":\"0.1.0\",\"event\":\"key_registered\",\"data\":{{\"account\":\"{account}\"}}}}"
@@ -405,16 +403,28 @@ fn log_cancel(account: &AccountId, hash: &[u8; 32]) {
     ));
 }
 
-fn log_fill(
-    buy_hash: &[u8; 32],
-    sell_hash: &[u8; 32],
-    buyer: &AccountId,
-    seller: &AccountId,
+struct FillEvent<'a> {
+    buy_hash: &'a [u8; 32],
+    sell_hash: &'a [u8; 32],
+    buyer: &'a AccountId,
+    seller: &'a AccountId,
     fill_lots: u64,
     price_ticks: u64,
     base_amount: u128,
     quote_amount: u128,
-) {
+}
+
+fn log_fill(fill: &FillEvent) {
+    let FillEvent {
+        buy_hash,
+        sell_hash,
+        buyer,
+        seller,
+        fill_lots,
+        price_ticks,
+        base_amount,
+        quote_amount,
+    } = fill;
     env::log_str(&format!(
         "EVENT_JSON:{{\"standard\":\"terra_escrow\",\"version\":\"0.1.0\",\"event\":\"fill\",\"data\":{{\"buy_hash\":\"{}\",\"sell_hash\":\"{}\",\"buyer\":\"{buyer}\",\"seller\":\"{seller}\",\"fill_lots\":{fill_lots},\"price_ticks\":{price_ticks},\"base_amount\":\"{base_amount}\",\"quote_amount\":\"{quote_amount}\"}}}}",
         bytes32_to_hex(buy_hash),
@@ -427,7 +437,7 @@ mod tests {
     use super::*;
     use ed25519_dalek::{Signer, SigningKey};
     use near_sdk::test_utils::{accounts, VMContextBuilder};
-    use near_sdk::{testing_env, NearToken};
+    use near_sdk::{testing_env, NearToken, PromiseResult};
 
     const LOT: u128 = 1_000_000;
     const QUOTE_PER_TICK: u128 = 10;
@@ -442,7 +452,7 @@ mod tests {
 
     fn order_hash_for(order: &Order) -> [u8; 32] {
         let bytes = canonical_bytes(order).expect("canonical");
-        env::sha256(&bytes)
+        env::sha256_array(&bytes)
     }
 
     fn sign_order(order: &Order, key: &SigningKey) -> SignedOrder {
@@ -496,9 +506,25 @@ mod tests {
         contract.register_key(pubkey_hex());
     }
 
-    fn fund_pair(contract: &mut Escrow, buyer: AccountId, seller: AccountId, quote: u128, base: u128) {
-        deposit(contract, buyer.clone(), "quote.testnet".parse().expect("id"), quote);
-        deposit(contract, seller.clone(), "base.testnet".parse().expect("id"), base);
+    fn fund_pair(
+        contract: &mut Escrow,
+        buyer: AccountId,
+        seller: AccountId,
+        quote: u128,
+        base: u128,
+    ) {
+        deposit(
+            contract,
+            buyer.clone(),
+            "quote.testnet".parse().expect("id"),
+            quote,
+        );
+        deposit(
+            contract,
+            seller.clone(),
+            "base.testnet".parse().expect("id"),
+            base,
+        );
         register(contract, buyer);
         register(contract, seller);
     }
@@ -507,8 +533,16 @@ mod tests {
     fn deposit_credits_balance() {
         let mut c = init_contract();
         let alice = accounts(1);
-        deposit(&mut c, alice.clone(), "quote.testnet".parse().expect("id"), 500);
-        assert_eq!(c.balance_of(alice, "quote.testnet".parse().expect("id")).0, 500);
+        deposit(
+            &mut c,
+            alice.clone(),
+            "quote.testnet".parse().expect("id"),
+            500,
+        );
+        assert_eq!(
+            c.balance_of(alice, "quote.testnet".parse().expect("id")).0,
+            500
+        );
     }
 
     #[test]
@@ -530,24 +564,43 @@ mod tests {
         let base_need = fill_lots as u128 * LOT;
         fund_pair(&mut c, buyer.clone(), seller.clone(), quote_need, base_need);
 
-        let buy = sign_order(&base_order(&buyer.to_string(), Side::Buy, 100, 5, 1), &test_signing_key());
+        let buy = sign_order(
+            &base_order(buyer.as_str(), Side::Buy, 100, 5, 1),
+            &test_signing_key(),
+        );
         let sell = sign_order(
-            &base_order(&seller.to_string(), Side::Sell, 90, 5, 2),
+            &base_order(seller.as_str(), Side::Sell, 90, 5, 2),
             &test_signing_key(),
         );
 
         c.settle(buy, sell, fill_lots, price);
 
-        let logs = near_sdk::env::logs();
+        let logs = near_sdk::test_utils::get_logs();
         assert!(logs.iter().any(|line| line.contains("\"event\":\"fill\"")));
 
-        assert_eq!(c.balance_of(buyer.clone(), "quote.testnet".parse().expect("id")).0, 0);
-        assert_eq!(c.balance_of(buyer.clone(), "base.testnet".parse().expect("id")).0, base_need);
-        assert_eq!(c.balance_of(seller.clone(), "quote.testnet".parse().expect("id")).0, quote_need);
-        assert_eq!(c.balance_of(seller.clone(), "base.testnet".parse().expect("id")).0, 0);
+        assert_eq!(
+            c.balance_of(buyer.clone(), "quote.testnet".parse().expect("id"))
+                .0,
+            0
+        );
+        assert_eq!(
+            c.balance_of(buyer.clone(), "base.testnet".parse().expect("id"))
+                .0,
+            base_need
+        );
+        assert_eq!(
+            c.balance_of(seller.clone(), "quote.testnet".parse().expect("id"))
+                .0,
+            quote_need
+        );
+        assert_eq!(
+            c.balance_of(seller.clone(), "base.testnet".parse().expect("id"))
+                .0,
+            0
+        );
 
         let buy_hash = bytes32_to_hex(&order_hash_for(&base_order(
-            &buyer.to_string(),
+            buyer.as_str(),
             Side::Buy,
             100,
             5,
@@ -562,11 +615,20 @@ mod tests {
         let mut c = init_contract();
         let buyer = accounts(1);
         let seller = accounts(2);
-        fund_pair(&mut c, buyer.clone(), seller.clone(), 10_000 * QUOTE_PER_TICK, 10 * LOT);
+        fund_pair(
+            &mut c,
+            buyer.clone(),
+            seller.clone(),
+            10_000 * QUOTE_PER_TICK,
+            10 * LOT,
+        );
 
-        let buy = sign_order(&base_order(&buyer.to_string(), Side::Buy, 100, 10, 1), &test_signing_key());
+        let buy = sign_order(
+            &base_order(buyer.as_str(), Side::Buy, 100, 10, 1),
+            &test_signing_key(),
+        );
         let sell = sign_order(
-            &base_order(&seller.to_string(), Side::Sell, 50, 10, 2),
+            &base_order(seller.as_str(), Side::Sell, 50, 10, 2),
             &test_signing_key(),
         );
 
@@ -574,16 +636,13 @@ mod tests {
         c.settle(buy, sell, 7, 75);
 
         let buy_hash = bytes32_to_hex(&order_hash_for(&base_order(
-            &buyer.to_string(),
+            buyer.as_str(),
             Side::Buy,
             100,
             10,
             1,
         )));
-        assert_eq!(
-            c.order_state(buyer, buy_hash).filled_lots,
-            10
-        );
+        assert_eq!(c.order_state(buyer, buy_hash).filled_lots, 10);
     }
 
     #[test]
@@ -593,10 +652,13 @@ mod tests {
         let buyer = accounts(1);
         let seller = accounts(2);
         fund_pair(&mut c, buyer.clone(), seller.clone(), 5000, 5 * LOT);
-        let mut buy = sign_order(&base_order(&buyer.to_string(), Side::Buy, 100, 5, 1), &test_signing_key());
+        let mut buy = sign_order(
+            &base_order(buyer.as_str(), Side::Buy, 100, 5, 1),
+            &test_signing_key(),
+        );
         buy.signature = "00".repeat(64);
         let sell = sign_order(
-            &base_order(&seller.to_string(), Side::Sell, 90, 5, 2),
+            &base_order(seller.as_str(), Side::Sell, 90, 5, 2),
             &test_signing_key(),
         );
         c.settle(buy, sell, 5, 100);
@@ -608,12 +670,25 @@ mod tests {
         let mut c = init_contract();
         let buyer = accounts(1);
         let seller = accounts(2);
-        deposit(&mut c, buyer.clone(), "quote.testnet".parse().expect("id"), 5000);
-        deposit(&mut c, seller.clone(), "base.testnet".parse().expect("id"), 5 * LOT);
-        register(&mut c, seller);
-        let buy = sign_order(&base_order(&buyer.to_string(), Side::Buy, 100, 5, 1), &test_signing_key());
+        deposit(
+            &mut c,
+            buyer.clone(),
+            "quote.testnet".parse().expect("id"),
+            5000,
+        );
+        deposit(
+            &mut c,
+            seller.clone(),
+            "base.testnet".parse().expect("id"),
+            5 * LOT,
+        );
+        register(&mut c, seller.clone());
+        let buy = sign_order(
+            &base_order(buyer.as_str(), Side::Buy, 100, 5, 1),
+            &test_signing_key(),
+        );
         let sell = sign_order(
-            &base_order(&seller.to_string(), Side::Sell, 90, 5, 2),
+            &base_order(seller.as_str(), Side::Sell, 90, 5, 2),
             &test_signing_key(),
         );
         c.settle(buy, sell, 5, 100);
@@ -626,7 +701,7 @@ mod tests {
         let buyer = accounts(1);
         let seller = accounts(2);
         fund_pair(&mut c, buyer.clone(), seller.clone(), 5000, 5 * LOT);
-        let mut buy_order = base_order(&buyer.to_string(), Side::Buy, 100, 5, 1);
+        let mut buy_order = base_order(buyer.as_str(), Side::Buy, 100, 5, 1);
         buy_order.expiry_ns = 1;
         let mut ctx = VMContextBuilder::new();
         ctx.current_account_id(accounts(0));
@@ -634,7 +709,7 @@ mod tests {
         testing_env!(ctx.build());
         let buy = sign_order(&buy_order, &test_signing_key());
         let sell = sign_order(
-            &base_order(&seller.to_string(), Side::Sell, 90, 5, 2),
+            &base_order(seller.as_str(), Side::Sell, 90, 5, 2),
             &test_signing_key(),
         );
         c.settle(buy, sell, 5, 100);
@@ -647,11 +722,11 @@ mod tests {
         let buyer = accounts(1);
         let seller = accounts(2);
         fund_pair(&mut c, buyer.clone(), seller.clone(), 5000, 5 * LOT);
-        let mut buy_order = base_order(&buyer.to_string(), Side::Buy, 100, 5, 1);
+        let mut buy_order = base_order(buyer.as_str(), Side::Buy, 100, 5, 1);
         buy_order.contract_id = "other.testnet".to_string();
         let buy = sign_order(&buy_order, &test_signing_key());
         let sell = sign_order(
-            &base_order(&seller.to_string(), Side::Sell, 90, 5, 2),
+            &base_order(seller.as_str(), Side::Sell, 90, 5, 2),
             &test_signing_key(),
         );
         c.settle(buy, sell, 5, 100);
@@ -664,8 +739,11 @@ mod tests {
         let buyer = accounts(1);
         let seller = accounts(2);
         fund_pair(&mut c, buyer.clone(), seller.clone(), 5000, 5 * LOT);
-        let buy = sign_order(&base_order(&buyer.to_string(), Side::Buy, 100, 5, 1), &test_signing_key());
-        let mut sell_order = base_order(&seller.to_string(), Side::Sell, 90, 5, 2);
+        let buy = sign_order(
+            &base_order(buyer.as_str(), Side::Buy, 100, 5, 1),
+            &test_signing_key(),
+        );
+        let mut sell_order = base_order(seller.as_str(), Side::Sell, 90, 5, 2);
         sell_order.quote_token = "other.quote".to_string();
         let sell = sign_order(&sell_order, &test_signing_key());
         c.settle(buy, sell, 5, 100);
@@ -678,9 +756,12 @@ mod tests {
         let buyer = accounts(1);
         let seller = accounts(2);
         fund_pair(&mut c, buyer.clone(), seller.clone(), 5000, 5 * LOT);
-        let buy = sign_order(&base_order(&buyer.to_string(), Side::Buy, 100, 5, 1), &test_signing_key());
+        let buy = sign_order(
+            &base_order(buyer.as_str(), Side::Buy, 100, 5, 1),
+            &test_signing_key(),
+        );
         let sell = sign_order(
-            &base_order(&seller.to_string(), Side::Buy, 90, 5, 2),
+            &base_order(seller.as_str(), Side::Buy, 90, 5, 2),
             &test_signing_key(),
         );
         c.settle(buy, sell, 5, 100);
@@ -692,9 +773,12 @@ mod tests {
         let mut c = init_contract();
         let buyer = accounts(1);
         fund_pair(&mut c, buyer.clone(), buyer.clone(), 5000, 5 * LOT);
-        let buy = sign_order(&base_order(&buyer.to_string(), Side::Buy, 100, 5, 1), &test_signing_key());
+        let buy = sign_order(
+            &base_order(buyer.as_str(), Side::Buy, 100, 5, 1),
+            &test_signing_key(),
+        );
         let sell = sign_order(
-            &base_order(&buyer.to_string(), Side::Sell, 90, 5, 2),
+            &base_order(buyer.as_str(), Side::Sell, 90, 5, 2),
             &test_signing_key(),
         );
         c.settle(buy, sell, 5, 100);
@@ -707,9 +791,12 @@ mod tests {
         let buyer = accounts(1);
         let seller = accounts(2);
         fund_pair(&mut c, buyer.clone(), seller.clone(), 5000, 5 * LOT);
-        let buy = sign_order(&base_order(&buyer.to_string(), Side::Buy, 100, 5, 1), &test_signing_key());
+        let buy = sign_order(
+            &base_order(buyer.as_str(), Side::Buy, 100, 5, 1),
+            &test_signing_key(),
+        );
         let sell = sign_order(
-            &base_order(&seller.to_string(), Side::Sell, 90, 5, 2),
+            &base_order(seller.as_str(), Side::Sell, 90, 5, 2),
             &test_signing_key(),
         );
         c.settle(buy, sell, 5, 101);
@@ -722,9 +809,12 @@ mod tests {
         let buyer = accounts(1);
         let seller = accounts(2);
         fund_pair(&mut c, buyer.clone(), seller.clone(), 5000, 5 * LOT);
-        let buy = sign_order(&base_order(&buyer.to_string(), Side::Buy, 100, 5, 1), &test_signing_key());
+        let buy = sign_order(
+            &base_order(buyer.as_str(), Side::Buy, 100, 5, 1),
+            &test_signing_key(),
+        );
         let sell = sign_order(
-            &base_order(&seller.to_string(), Side::Sell, 90, 5, 2),
+            &base_order(seller.as_str(), Side::Sell, 90, 5, 2),
             &test_signing_key(),
         );
         c.settle(buy, sell, 5, 89);
@@ -737,9 +827,12 @@ mod tests {
         let buyer = accounts(1);
         let seller = accounts(2);
         fund_pair(&mut c, buyer.clone(), seller.clone(), 5000, 5 * LOT);
-        let buy = sign_order(&base_order(&buyer.to_string(), Side::Buy, 100, 5, 1), &test_signing_key());
+        let buy = sign_order(
+            &base_order(buyer.as_str(), Side::Buy, 100, 5, 1),
+            &test_signing_key(),
+        );
         let sell = sign_order(
-            &base_order(&seller.to_string(), Side::Sell, 90, 5, 2),
+            &base_order(seller.as_str(), Side::Sell, 90, 5, 2),
             &test_signing_key(),
         );
         c.settle(buy, sell, 6, 100);
@@ -752,9 +845,12 @@ mod tests {
         let buyer = accounts(1);
         let seller = accounts(2);
         fund_pair(&mut c, buyer.clone(), seller.clone(), 5000, 5 * LOT);
-        let buy = sign_order(&base_order(&buyer.to_string(), Side::Buy, 100, 5, 1), &test_signing_key());
+        let buy = sign_order(
+            &base_order(buyer.as_str(), Side::Buy, 100, 5, 1),
+            &test_signing_key(),
+        );
         let sell = sign_order(
-            &base_order(&seller.to_string(), Side::Sell, 90, 5, 2),
+            &base_order(seller.as_str(), Side::Sell, 90, 5, 2),
             &test_signing_key(),
         );
         c.settle(buy, sell, 0, 100);
@@ -767,9 +863,12 @@ mod tests {
         let buyer = accounts(1);
         let seller = accounts(2);
         fund_pair(&mut c, buyer.clone(), seller.clone(), 1, 5 * LOT);
-        let buy = sign_order(&base_order(&buyer.to_string(), Side::Buy, 100, 5, 1), &test_signing_key());
+        let buy = sign_order(
+            &base_order(buyer.as_str(), Side::Buy, 100, 5, 1),
+            &test_signing_key(),
+        );
         let sell = sign_order(
-            &base_order(&seller.to_string(), Side::Sell, 90, 5, 2),
+            &base_order(seller.as_str(), Side::Sell, 90, 5, 2),
             &test_signing_key(),
         );
         c.settle(buy, sell, 5, 100);
@@ -782,10 +881,10 @@ mod tests {
         let buyer = accounts(1);
         let seller = accounts(2);
         fund_pair(&mut c, buyer.clone(), seller.clone(), u128::MAX, u128::MAX);
-        let mut buy_order = base_order(&buyer.to_string(), Side::Buy, 100, 5, 1);
+        let mut buy_order = base_order(buyer.as_str(), Side::Buy, u64::MAX, 5, 1);
         buy_order.lot_size_base = u128::MAX;
         buy_order.quote_per_tick_lot = u128::MAX;
-        let mut sell_order = base_order(&seller.to_string(), Side::Sell, 90, 5, 2);
+        let mut sell_order = base_order(seller.as_str(), Side::Sell, 1, 5, 2);
         sell_order.lot_size_base = u128::MAX;
         sell_order.quote_per_tick_lot = u128::MAX;
         let buy = sign_order(&buy_order, &test_signing_key());
@@ -800,13 +899,13 @@ mod tests {
         let buyer = accounts(1);
         let seller = accounts(2);
         fund_pair(&mut c, buyer.clone(), seller.clone(), 5000, 5 * LOT);
-        let buy_order = base_order(&buyer.to_string(), Side::Buy, 100, 5, 1);
+        let buy_order = base_order(buyer.as_str(), Side::Buy, 100, 5, 1);
         let buy_hash = bytes32_to_hex(&order_hash_for(&buy_order));
         set_predecessor(buyer.clone());
         c.cancel_order(buy_hash);
         let buy = sign_order(&buy_order, &test_signing_key());
         let sell = sign_order(
-            &base_order(&seller.to_string(), Side::Sell, 90, 5, 2),
+            &base_order(seller.as_str(), Side::Sell, 90, 5, 2),
             &test_signing_key(),
         );
         c.settle(buy, sell, 5, 100);
@@ -818,7 +917,7 @@ mod tests {
         let buyer = accounts(1);
         let seller = accounts(2);
         register(&mut c, buyer.clone());
-        let buy_order = base_order(&buyer.to_string(), Side::Buy, 100, 5, 1);
+        let buy_order = base_order(buyer.as_str(), Side::Buy, 100, 5, 1);
         let buy_hash = bytes32_to_hex(&order_hash_for(&buy_order));
         set_predecessor(seller);
         c.cancel_order(buy_hash.clone());
@@ -826,47 +925,135 @@ mod tests {
         assert!(!state.cancelled);
     }
 
-    #[test]
-    fn refund_failed_withdraw_restores_balance() {
-        let mut c = init_contract();
-        let alice = accounts(1);
-        deposit(&mut c, alice.clone(), "quote.testnet".parse().expect("id"), 100);
-        c.refund_failed_withdraw(
-            alice.clone(),
-            "quote.testnet".parse().expect("id"),
-            U128(40),
+    fn quote_token() -> AccountId {
+        "quote.testnet".parse().expect("id")
+    }
+
+    /// Runs `on_withdraw` as the contract itself with the given promise result.
+    fn run_callback(c: &mut Escrow, account: AccountId, amount: u128, result: PromiseResult) {
+        let mut ctx = VMContextBuilder::new();
+        ctx.current_account_id(accounts(0));
+        ctx.predecessor_account_id(accounts(0));
+        testing_env!(
+            ctx.build(),
+            near_sdk::test_vm_config(),
+            near_sdk::RuntimeFeesConfig::test(),
+            Default::default(),
+            vec![result]
         );
-        assert_eq!(c.balance_of(alice.clone(), "quote.testnet".parse().expect("id")).0, 140);
+        c.on_withdraw(account, quote_token(), U128(amount), accounts(3));
     }
 
     #[test]
-    fn withdraw_debits_then_refund_restores() {
+    fn callback_failed_transfer_restores_balance() {
         let mut c = init_contract();
         let alice = accounts(1);
-        deposit(&mut c, alice.clone(), "quote.testnet".parse().expect("id"), 100);
-        let token: AccountId = "quote.testnet".parse().expect("id");
+        deposit(&mut c, alice.clone(), quote_token(), 100);
         let mut ctx = VMContextBuilder::new();
         ctx.current_account_id(accounts(0));
         ctx.predecessor_account_id(alice.clone());
         ctx.attached_deposit(NearToken::from_yoctonear(1));
         testing_env!(ctx.build());
-        c.withdraw(token.clone(), U128(40), None);
-        assert_eq!(c.balance_of(alice.clone(), token.clone()).0, 60);
-        c.refund_failed_withdraw(alice.clone(), token, U128(40));
-        assert_eq!(c.balance_of(alice, "quote.testnet".parse().expect("id")).0, 100);
+        c.withdraw(quote_token(), U128(40), None);
+        assert_eq!(c.balance_of(alice.clone(), quote_token()).0, 60);
+        run_callback(&mut c, alice.clone(), 40, PromiseResult::Failed);
+        assert_eq!(c.balance_of(alice, quote_token()).0, 100);
+    }
+
+    #[test]
+    fn callback_successful_transfer_keeps_debit() {
+        let mut c = init_contract();
+        let alice = accounts(1);
+        deposit(&mut c, alice.clone(), quote_token(), 100);
+        let mut ctx = VMContextBuilder::new();
+        ctx.current_account_id(accounts(0));
+        ctx.predecessor_account_id(alice.clone());
+        ctx.attached_deposit(NearToken::from_yoctonear(1));
+        testing_env!(ctx.build());
+        c.withdraw(quote_token(), U128(40), None);
+        run_callback(&mut c, alice.clone(), 40, PromiseResult::Successful(vec![]));
+        assert_eq!(c.balance_of(alice, quote_token()).0, 60);
+    }
+
+    #[test]
+    fn callback_successful_transfer_with_long_result_is_not_refunded() {
+        let mut c = init_contract();
+        let alice = accounts(1);
+        deposit(&mut c, alice.clone(), quote_token(), 100);
+        let mut ctx = VMContextBuilder::new();
+        ctx.current_account_id(accounts(0));
+        ctx.predecessor_account_id(alice.clone());
+        ctx.attached_deposit(NearToken::from_yoctonear(1));
+        testing_env!(ctx.build());
+        c.withdraw(quote_token(), U128(40), None);
+        run_callback(
+            &mut c,
+            alice.clone(),
+            40,
+            PromiseResult::Successful(vec![1u8; 1000]),
+        );
+        assert_eq!(c.balance_of(alice, quote_token()).0, 60);
+    }
+
+    #[test]
+    #[should_panic(expected = "insufficient_balance")]
+    fn withdraw_more_than_balance_fails() {
+        let mut c = init_contract();
+        let alice = accounts(1);
+        deposit(&mut c, alice.clone(), quote_token(), 10);
+        let mut ctx = VMContextBuilder::new();
+        ctx.current_account_id(accounts(0));
+        ctx.predecessor_account_id(alice);
+        ctx.attached_deposit(NearToken::from_yoctonear(1));
+        testing_env!(ctx.build());
+        c.withdraw(quote_token(), U128(11), None);
+    }
+
+    #[test]
+    #[should_panic(expected = "wrong_version")]
+    fn settle_wrong_version() {
+        let mut c = init_contract();
+        let buyer = accounts(1);
+        let seller = accounts(2);
+        fund_pair(&mut c, buyer.clone(), seller.clone(), 5000, 5 * LOT);
+        let mut buy_order = base_order(buyer.as_str(), Side::Buy, 100, 5, 1);
+        buy_order.v = 2;
+        let buy = sign_order(&buy_order, &test_signing_key());
+        let sell = sign_order(
+            &base_order(seller.as_str(), Side::Sell, 90, 5, 2),
+            &test_signing_key(),
+        );
+        c.settle(buy, sell, 5, 100);
+    }
+
+    #[test]
+    fn deposit_is_not_withdrawable_by_others() {
+        let mut c = init_contract();
+        let alice = accounts(1);
+        deposit(&mut c, alice.clone(), quote_token(), 100);
+        assert_eq!(c.balance_of(accounts(2), quote_token()).0, 0);
+        assert_eq!(c.balance_of(alice, quote_token()).0, 100);
     }
 
     #[test]
     fn withdraw_debits_before_promise() {
         let mut c = init_contract();
         let alice = accounts(1);
-        deposit(&mut c, alice.clone(), "quote.testnet".parse().expect("id"), 100);
+        deposit(
+            &mut c,
+            alice.clone(),
+            "quote.testnet".parse().expect("id"),
+            100,
+        );
         let mut ctx = VMContextBuilder::new();
         ctx.current_account_id(accounts(0));
         ctx.predecessor_account_id(alice.clone());
         ctx.attached_deposit(NearToken::from_yoctonear(1));
         testing_env!(ctx.build());
         c.withdraw("quote.testnet".parse().expect("id"), U128(40), None);
-        assert_eq!(c.balance_of(alice, "quote.testnet".parse().expect("id")).0, 60);
+        assert_eq!(
+            c.balance_of(alice, "quote.testnet".parse().expect("id")).0,
+            60
+        );
     }
 }
