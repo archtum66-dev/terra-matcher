@@ -1,0 +1,31 @@
+{
+  "fill_seq": 1,
+  "buyer": "bob.test",
+  "seller": "alice.test",
+  "buyer_draft": {
+    "signer_id": "bob.test",
+    "deadline": "2030-01-01T00:00:00Z",
+    "intents": [
+      {
+        "intent": "token_diff",
+        "diff": {
+          "nep141:wrap.near": "5",
+          "nep141:usdc.near": "-500"
+        }
+      }
+    ]
+  },
+  "seller_draft": {
+    "signer_id": "alice.test",
+    "deadline": "2030-01-01T00:00:00Z",
+    "intents": [
+      {
+        "intent": "token_diff",
+        "diff": {
+          "nep141:wrap.near": "-5",
+          "nep141:usdc.near": "500"
+        }
+      }
+    ]
+  }
+}

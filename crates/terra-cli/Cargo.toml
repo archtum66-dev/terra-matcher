@@ -8,8 +8,13 @@ license = "MIT"
 name = "terra"
 path = "src/main.rs"
 
+[features]
+default = []
+http = ["settlement/http"]
+
 [dependencies]
 matcher-api = { path = "../matcher-api" }
 matcher-stub = { path = "../matcher-stub" }
+settlement = { path = "../settlement" }
 serde = { version = "1.0.217", features = ["derive"] }
 serde_json = "1.0.138"

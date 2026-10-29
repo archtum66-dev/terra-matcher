@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/matcher-api",
     "crates/matcher-stub",
+    "crates/settlement",
     "crates/terra-cli",
 ]
 

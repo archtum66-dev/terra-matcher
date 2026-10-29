@@ -1,0 +1,24 @@
+[package]
+name = "settlement"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+matcher-api = { path = "../matcher-api" }
+serde = { version = "1.0.217", features = ["derive"] }
+serde_json = "1.0.138"
+
+[dependencies.ureq]
+version = "2.10.1"
+optional = true
+default-features = false
+features = ["json"]
+
+[features]
+default = []
+http = ["ureq"]
+
+[dev-dependencies]
+matcher-api = { path = "../matcher-api" }
+serde_json = "1.0.138"

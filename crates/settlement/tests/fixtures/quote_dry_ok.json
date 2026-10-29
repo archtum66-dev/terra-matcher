@@ -1,0 +1,26 @@
+{
+  "correlationId": "dry-correlation-001",
+  "timestamp": "2030-01-01T12:00:00Z",
+  "signature": "example-signature-not-real",
+  "quoteRequest": {
+    "dry": true,
+    "swapType": "EXACT_INPUT",
+    "slippageTolerance": 100,
+    "originAsset": "nep141:wrap.near",
+    "depositType": "INTENTS",
+    "destinationAsset": "nep141:usdc.near",
+    "amount": "1000000",
+    "refundTo": "alice.test",
+    "refundType": "INTENTS",
+    "recipient": "alice.test",
+    "recipientType": "INTENTS",
+    "deadline": "2030-01-01T00:00:00Z"
+  },
+  "quote": {
+    "amountIn": "1000000",
+    "minAmountIn": "995000",
+    "amountOut": "9950000",
+    "minAmountOut": "9900000",
+    "timeEstimate": 120
+  }
+}
