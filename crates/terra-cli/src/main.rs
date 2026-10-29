@@ -1,10 +1,13 @@
 #![forbid(unsafe_code)]
 
+mod flow;
+
 use std::env;
 use std::fs;
 use std::io::{self, Write};
 use std::path::Path;
 use std::process;
+use std::time::Instant;
 
 use matcher_api::{quote_amount, Ack, Fill, Market, Matcher, Message};
 use matcher_stub::StubMatcher;
@@ -46,6 +49,8 @@ fn usage() {
         "  terra settle --market <market.json> --orders <orders.jsonl> [--deadline <ISO>] [--reference <quote.json>] [--tolerance-bps <n>]"
     );
     eprintln!("  terra demo");
+    eprintln!("  terra gen --messages <n> [--seed <n>]");
+    eprintln!("  terra bench --messages <n> [--seed <n>] [--repeat <n>]");
     #[cfg(feature = "http")]
     eprintln!("  terra quote --dry --file <request.json>");
 }
@@ -230,6 +235,157 @@ fn parse_quote_args(args: &[String]) -> Result<String, String> {
     Ok(args[3].clone())
 }
 
+/// `--messages <n> [--seed <n>] [--repeat <n>]` for `gen` and `bench`.
+fn parse_flow_args(args: &[String], command: &str) -> Result<(u64, u64, u32), String> {
+    if args.is_empty() || args[0] != command {
+        return Err(format!("expected {command} subcommand"));
+    }
+    let mut messages = None;
+    let mut seed = 1u64;
+    let mut repeat = 3u32;
+    let mut i = 1;
+    while i < args.len() {
+        let flag = args[i].as_str();
+        let value = next_arg(args, i + 1, flag)?;
+        match flag {
+            "--messages" => {
+                messages = Some(
+                    value
+                        .parse::<u64>()
+                        .map_err(|_| format!("invalid --messages: {value}"))?,
+                );
+            }
+            "--seed" => {
+                seed = value
+                    .parse::<u64>()
+                    .map_err(|_| format!("invalid --seed: {value}"))?;
+            }
+            "--repeat" if command == "bench" => {
+                repeat = value
+                    .parse::<u32>()
+                    .ok()
+                    .filter(|r| *r >= 1)
+                    .ok_or_else(|| format!("invalid --repeat: {value}"))?;
+            }
+            other => return Err(format!("unknown {command} argument: {other}")),
+        }
+        i += 2;
+    }
+    let messages = messages.ok_or("missing --messages")?;
+    if messages == 0 || messages > 50_000_000 {
+        return Err("--messages must be between 1 and 50000000".to_string());
+    }
+    Ok((messages, seed, repeat))
+}
+
+fn run_gen(messages: u64, seed: u64) -> Result<(), String> {
+    let stdout = io::stdout();
+    let mut out = io::BufWriter::new(stdout.lock());
+    for msg in flow::generate(messages, seed) {
+        serde_json::to_writer(&mut out, &msg).map_err(|e| format!("write message: {e}"))?;
+        writeln!(out).map_err(|e| format!("write newline: {e}"))?;
+    }
+    out.flush().map_err(|e| format!("flush: {e}"))
+}
+
+fn default_market() -> Market {
+    Market {
+        market_id: "NEAR-USDC".to_string(),
+        base_token: "nep141:wrap.near".to_string(),
+        quote_token: "nep141:usdc.near".to_string(),
+        lot_size_base: 1,
+        quote_per_tick_lot: 1,
+    }
+}
+
+/// Times the reference matcher and the settlement builder on a synthetic flow; one JSON line.
+fn run_bench(messages: u64, seed: u64, repeat: u32) -> Result<(), String> {
+    let market = default_market();
+    let flow = flow::generate(messages, seed);
+
+    let mut best_match = f64::MAX;
+    let mut fills: Vec<Fill> = Vec::new();
+    let mut accepted = 0u64;
+    let mut rejected = 0u64;
+    let mut resting_end = 0u64;
+    for _ in 0..repeat {
+        let mut matcher = StubMatcher::new(market.clone());
+        let mut run_fills: Vec<Fill> = Vec::new();
+        let (mut ok, mut bad) = (0u64, 0u64);
+        let start = Instant::now();
+        for msg in &flow {
+            let (ack, f) = matcher.process(msg.clone());
+            if ack.status == matcher_api::Status::Accepted {
+                ok += 1;
+            } else {
+                bad += 1;
+            }
+            run_fills.extend(f);
+        }
+        let elapsed = start.elapsed().as_secs_f64();
+        best_match = best_match.min(elapsed);
+        let view = matcher.book_view();
+        resting_end = view
+            .bids
+            .iter()
+            .chain(view.asks.iter())
+            .map(|l| l.orders.len() as u64)
+            .sum();
+        fills = run_fills;
+        accepted = ok;
+        rejected = bad;
+    }
+
+    let mut best_settle = f64::MAX;
+    let mut settled = 0u64;
+    for _ in 0..repeat {
+        let start = Instant::now();
+        let mut n = 0u64;
+        for fill in &fills {
+            settle_fill(&market, fill, DEFAULT_SETTLEMENT_DEADLINE)
+                .map_err(|e| format!("settle fill {}: {e}", fill.seq))?;
+            n += 1;
+        }
+        best_settle = best_settle.min(start.elapsed().as_secs_f64());
+        settled = n;
+    }
+
+    let sample: Vec<&Fill> = fills.iter().take(10_000).collect();
+    let mut bytes = 0usize;
+    for fill in &sample {
+        let pair = settle_fill(&market, fill, DEFAULT_SETTLEMENT_DEADLINE)
+            .map_err(|e| format!("settle fill {}: {e}", fill.seq))?;
+        bytes += serde_json::to_string(&pair)
+            .map_err(|e| format!("serialize: {e}"))?
+            .len();
+    }
+    let avg_bytes = if sample.is_empty() {
+        0.0
+    } else {
+        bytes as f64 / sample.len() as f64
+    };
+    let matched_lots: u128 = fills.iter().map(|f| u128::from(f.qty_lots)).sum();
+    let per_second = |n: u64, secs: f64| if secs > 0.0 { n as f64 / secs } else { 0.0 };
+
+    let line = serde_json::json!({
+        "messages": messages,
+        "seed": seed,
+        "repeat": repeat,
+        "accepted": accepted,
+        "rejected": rejected,
+        "fills": fills.len(),
+        "matched_lots": matched_lots.to_string(),
+        "resting_orders_at_end": resting_end,
+        "match_seconds_best": best_match,
+        "messages_per_second": per_second(messages, best_match),
+        "settle_seconds_best": best_settle,
+        "settlement_pairs_per_second": per_second(settled, best_settle),
+        "settlement_pair_json_bytes_avg": avg_bytes,
+    });
+    println!("{line}");
+    Ok(())
+}
+
 fn demo() -> Result<(), String> {
     let examples_dir = Path::new("examples");
     fs::create_dir_all(examples_dir).map_err(|e| format!("create examples: {e}"))?;
@@ -255,7 +411,7 @@ fn demo() -> Result<(), String> {
     fs::write(examples_dir.join("orders.jsonl"), orders_jsonl)
         .map_err(|e| format!("write orders.jsonl: {e}"))?;
 
-    run_match("examples/market.json", "examples/orders.jsonl")?;
+    // `settle` prints the acks and fills as well, so the demo shows each line once.
     run_settle(
         "examples/market.json",
         "examples/orders.jsonl",
@@ -275,6 +431,20 @@ fn main() {
             Err("missing command".to_string())
         }
         [cmd] if cmd == "demo" => demo(),
+        [cmd, ..] if cmd == "gen" => match parse_flow_args(&args, "gen") {
+            Ok((messages, seed, _)) => run_gen(messages, seed),
+            Err(e) => {
+                usage();
+                Err(e)
+            }
+        },
+        [cmd, ..] if cmd == "bench" => match parse_flow_args(&args, "bench") {
+            Ok((messages, seed, repeat)) => run_bench(messages, seed, repeat),
+            Err(e) => {
+                usage();
+                Err(e)
+            }
+        },
         [cmd, ..] if cmd == "settle" => match parse_settle_args(&args) {
             Ok((market, orders, opts)) => run_settle(&market, &orders, opts),
             Err(e) => {

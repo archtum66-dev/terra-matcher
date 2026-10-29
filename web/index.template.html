@@ -1,0 +1,544 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Terra on NEAR · Matching demo</title>
+<meta name="description" content="Offline demo: the reference matcher runs as WebAssembly in your browser and turns every fill into an unsigned NEAR Intents token_diff pair.">
+<style>
+:root {
+  --bg: #f4f6f8; --surface: #ffffff; --ink: #121821; --muted: #566274; --line: #dfe4eb;
+  --accent: #0c6b4d; --accent-ink: #ffffff; --accent-soft: #e2f3ec;
+  --buy: #0b7a53; --buy-soft: #e2f4ec; --sell: #b3252d; --sell-soft: #fbe8e9;
+  --warn: #8a5600; --warn-soft: #fff1d1; --focus: #1c5bd1; --code: #eef1f5;
+  --shadow: 0 1px 2px rgba(18, 24, 33, .06);
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f141b; --surface: #171d26; --ink: #e8edf4; --muted: #9aa7b8; --line: #2a3340;
+    --accent: #3fbf93; --accent-ink: #06231a; --accent-soft: #14352a;
+    --buy: #4cc79b; --buy-soft: #12352a; --sell: #f0838a; --sell-soft: #3a1a1e;
+    --warn: #f1bf62; --warn-soft: #3a2d10; --focus: #7aa7ff; --code: #202935;
+    --shadow: none;
+  }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+.mono, code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+code { background: var(--code); padding: 1px 5px; border-radius: 4px; font-size: .92em; }
+a { color: var(--accent); }
+header, main, footer { max-width: 1180px; margin: 0 auto; padding-left: 16px; padding-right: 16px; }
+header { padding-top: 28px; padding-bottom: 8px; }
+h1 { font-size: 1.55rem; line-height: 1.2; margin: 0 0 6px; }
+h2 { font-size: .8rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 12px; font-weight: 650; }
+.lead { margin: 0; max-width: 70ch; color: var(--muted); }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); font-size: .82rem; color: var(--muted); }
+.chip b { color: var(--ink); font-weight: 600; }
+.chip.good { border-color: transparent; background: var(--accent-soft); color: var(--accent); }
+.chip.good b { color: var(--accent); }
+.chip.bad { border-color: transparent; background: var(--sell-soft); color: var(--sell); }
+main { display: grid; grid-template-columns: minmax(280px, 380px) 1fr; gap: 16px; padding-top: 16px; padding-bottom: 40px; align-items: start; }
+@media (max-width: 860px) { main { grid-template-columns: 1fr; } }
+.col { display: grid; gap: 16px; min-width: 0; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; box-shadow: var(--shadow); min-width: 0; }
+.row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+label { display: block; font-size: .82rem; color: var(--muted); margin-bottom: 4px; }
+input, select, button { font: inherit; color: inherit; }
+input, select {
+  width: 100%; min-height: 40px; padding: 7px 10px; background: var(--surface);
+  border: 1px solid var(--line); border-radius: 8px;
+}
+input[type=number] { font-variant-numeric: tabular-nums; }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.field { margin-bottom: 10px; }
+.seg { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg label { margin: 0; }
+.seg input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.seg span { display: block; text-align: center; padding: 9px 0; cursor: pointer; font-weight: 600; min-height: 40px; }
+.seg input:checked + span.b { background: var(--buy-soft); color: var(--buy); }
+.seg input:checked + span.s { background: var(--sell-soft); color: var(--sell); }
+.seg input:focus-visible + span { outline: 3px solid var(--focus); outline-offset: -3px; }
+button {
+  min-height: 40px; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--surface); cursor: pointer; font-weight: 600;
+}
+button:hover { background: var(--code); }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+button.primary:hover { filter: brightness(1.08); background: var(--accent); }
+button.small { min-height: 32px; padding: 4px 10px; font-size: .84rem; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.hint { font-size: .84rem; color: var(--muted); margin: 8px 0 0; }
+.scenarios { display: grid; gap: 8px; }
+.scenarios button { text-align: left; font-weight: 600; }
+.scenarios button small { display: block; font-weight: 400; color: var(--muted); }
+.note { margin-top: 10px; padding: 10px 12px; border-radius: 8px; background: var(--warn-soft); color: var(--warn); font-size: .88rem; }
+.note:empty { display: none; }
+.err { margin-top: 8px; color: var(--sell); font-size: .88rem; min-height: 1.2em; }
+
+/* order book */
+.book { display: grid; gap: 3px; }
+.lvl { position: relative; display: grid; grid-template-columns: 74px 70px 1fr; gap: 8px; align-items: center; padding: 5px 8px; border-radius: 6px; overflow: hidden; }
+.lvl .bar { position: absolute; inset: 0 auto 0 0; opacity: .55; z-index: 0; }
+.lvl > *:not(.bar) { position: relative; z-index: 1; }
+.lvl.ask .bar { background: var(--sell-soft); }
+.lvl.bid .bar { background: var(--buy-soft); }
+.lvl .px { font-weight: 700; font-variant-numeric: tabular-nums; }
+.lvl.ask .px { color: var(--sell); } .lvl.bid .px { color: var(--buy); }
+.lvl .qty { font-variant-numeric: tabular-nums; color: var(--muted); }
+.lvl .ords { display: flex; flex-wrap: wrap; gap: 4px; font-size: .78rem; }
+.ord { background: var(--surface); border: 1px solid var(--line); border-radius: 5px; padding: 0 6px; white-space: nowrap; }
+.spread { text-align: center; font-size: .82rem; color: var(--muted); padding: 5px 0; border-top: 1px dashed var(--line); border-bottom: 1px dashed var(--line); margin: 3px 0; }
+.empty { color: var(--muted); font-size: .9rem; padding: 6px 8px; }
+
+/* log */
+.log { display: grid; gap: 10px; max-height: 520px; overflow: auto; }
+.step { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.step .top { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; }
+.step .n { color: var(--muted); font-size: .8rem; }
+.step .msg { font-weight: 650; }
+.badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: .78rem; font-weight: 650; }
+.badge.ok { background: var(--accent-soft); color: var(--accent); }
+.badge.rej { background: var(--sell-soft); color: var(--sell); }
+.nums { color: var(--muted); font-size: .85rem; margin-top: 2px; }
+.fill { margin-top: 6px; padding: 6px 10px; border-radius: 6px; background: var(--code); font-size: .88rem; }
+
+/* settlement */
+.pair { border: 1px solid var(--line); border-radius: 10px; margin-bottom: 10px; overflow: hidden; }
+.pair > summary { cursor: pointer; padding: 10px 12px; font-weight: 650; list-style: none; display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; }
+.pair > summary::-webkit-details-marker { display: none; }
+.pair > summary::before { content: "▸"; color: var(--muted); }
+.pair[open] > summary::before { content: "▾"; }
+.pair .body { padding: 0 12px 12px; display: grid; gap: 10px; grid-template-columns: 1fr 1fr; }
+@media (max-width: 640px) { .pair .body { grid-template-columns: 1fr; } }
+.draft { border: 1px solid var(--line); border-radius: 8px; padding: 10px; font-size: .86rem; }
+.draft h3 { margin: 0 0 6px; font-size: .84rem; }
+.draft .kv { display: flex; justify-content: space-between; gap: 8px; }
+.draft .kv span:first-child { color: var(--muted); overflow-wrap: anywhere; }
+.pos { color: var(--buy); font-weight: 700; } .neg { color: var(--sell); font-weight: 700; }
+.tools { padding: 0 12px 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+pre.json { margin: 0 12px 12px; padding: 10px; background: var(--code); border-radius: 8px; overflow: auto; font-size: .78rem; max-height: 260px; }
+
+/* conformance */
+.vecs { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 4px 12px; margin: 10px 0 0; padding: 0; list-style: none; font-size: .82rem; }
+.vecs li { display: flex; gap: 6px; align-items: baseline; overflow-wrap: anywhere; }
+.vecs .y { color: var(--buy); } .vecs .n { color: var(--sell); }
+footer { padding-top: 0; padding-bottom: 36px; color: var(--muted); font-size: .86rem; }
+noscript { display: block; padding: 16px; background: var(--warn-soft); color: var(--warn); }
+@media (prefers-reduced-motion: no-preference) { button { transition: background .12s, filter .12s; } }
+</style>
+</head>
+<body>
+<noscript>This demo needs JavaScript and WebAssembly. Nothing is sent anywhere.</noscript>
+<header>
+  <h1>Terra on NEAR · matching demo</h1>
+  <p class="lead">The reference matcher of this repository runs here as WebAssembly. Place orders, watch price-time matching, and see each fill turned into an unsigned NEAR Intents <code>token_diff</code> pair that balances to zero. No server, no keys, no network.</p>
+  <div class="chips" id="chips" aria-live="polite">
+    <span class="chip"><b id="chip-wasm">loading…</b></span>
+  </div>
+</header>
+
+<main>
+  <div class="col">
+    <section class="card" aria-labelledby="h-order">
+      <h2 id="h-order">Place an order</h2>
+      <form id="order-form" autocomplete="off">
+        <div class="field">
+          <label for="account">Account</label>
+          <select id="account">
+            <option>alice.test</option><option>bob.test</option><option>carol.test</option>
+          </select>
+        </div>
+        <div class="field">
+          <label id="side-label">Side</label>
+          <div class="seg" role="radiogroup" aria-labelledby="side-label">
+            <label><input type="radio" name="side" value="buy" checked><span class="b">Buy</span></label>
+            <label><input type="radio" name="side" value="sell"><span class="s">Sell</span></label>
+          </div>
+        </div>
+        <div class="row">
+          <div class="field"><label for="price">Price (ticks)</label><input id="price" type="number" min="1" step="1" value="100" required></div>
+          <div class="field"><label for="qty">Quantity (lots)</label><input id="qty" type="number" min="1" step="1" value="5" required></div>
+        </div>
+        <div class="row">
+          <div class="field">
+            <label for="tif">Time in force</label>
+            <select id="tif">
+              <option value="gtc">GTC (rests)</option>
+              <option value="ioc">IOC (fill or cancel rest)</option>
+              <option value="post_only">Post-only</option>
+            </select>
+          </div>
+          <div class="field"><label for="oid">Order id</label><input id="oid" type="text" value="o1" required></div>
+        </div>
+        <div class="actions">
+          <button class="primary" type="submit">Submit order</button>
+          <button type="button" id="cancel-btn">Cancel order…</button>
+        </div>
+        <div class="field" id="cancel-row" hidden style="margin-top:10px">
+          <label for="cancel-id">Cancel which resting order? (uses the account above)</label>
+          <div class="row"><select id="cancel-id"></select><button type="button" id="cancel-go">Send cancel</button></div>
+        </div>
+        <div class="err" id="err" role="alert"></div>
+      </form>
+    </section>
+
+    <section class="card" aria-labelledby="h-scen">
+      <h2 id="h-scen">Scenarios</h2>
+      <div class="scenarios" id="scenarios"></div>
+      <div class="note" id="scenario-note"></div>
+    </section>
+
+    <section class="card" aria-labelledby="h-conf">
+      <h2 id="h-conf">Conformance</h2>
+      <p class="hint" style="margin-top:0">The public test vectors from <code>tests/vectors</code> run on this very module, in your browser.</p>
+      <div class="actions" style="margin-top:10px"><button id="conf-run" class="small">Run vectors again</button></div>
+      <ul class="vecs" id="vecs"></ul>
+    </section>
+  </div>
+
+  <div class="col">
+    <section class="card" aria-labelledby="h-book">
+      <h2 id="h-book">Order book · <span id="market-name"></span></h2>
+      <div class="book" id="book"></div>
+    </section>
+
+    <section class="card" aria-labelledby="h-log">
+      <h2 id="h-log">Events</h2>
+      <div class="log" id="log" aria-live="polite"><div class="empty">No orders yet. Submit one or pick a scenario.</div></div>
+      <div class="actions" style="margin-top:12px">
+        <button id="export" class="small">Download orders.jsonl</button>
+        <button id="reset" class="small">Reset session</button>
+      </div>
+      <p class="hint">The downloaded file replays on the command line and gives the same output: <code>cargo run -p terra-cli -- match --market examples/market.json --orders orders.jsonl</code></p>
+    </section>
+
+    <section class="card" aria-labelledby="h-set">
+      <h2 id="h-set">Settlement drafts (unsigned)</h2>
+      <div id="settlements"><div class="empty">Fills appear here as pairs of <code>token_diff</code> intents.</div></div>
+      <p class="hint">Each pair nets to zero for every token. In production both parties sign their half in their own wallet and the pair is submitted to the NEAR Intents contract. Nothing is signed or sent from this page.</p>
+    </section>
+  </div>
+</main>
+
+<footer>
+  <p>Rules of the matcher: price-time priority, fills at the resting order's price, self-trade cancels the newest order, post-only never crosses. See <code>docs/SPEC.md</code>.</p>
+</footer>
+
+<script id="wasm-b64" type="application/octet-stream">__WASM_BASE64__</script>
+<script>
+"use strict";
+const enc = new TextEncoder();
+const dec = new TextDecoder();
+let wasm = null;
+let market = null;
+let steps = [];
+let pairs = [];
+let nextN = 1;
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+function b64ToBytes(b64) {
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+function call(op, text) {
+  const bytes = enc.encode(text || "");
+  const ptr = wasm.input_reserve(bytes.length);
+  new Uint8Array(wasm.memory.buffer, ptr, bytes.length).set(bytes);
+  const len = wasm.run(op);
+  const out = new Uint8Array(wasm.memory.buffer, wasm.output_ptr(), len);
+  const parsed = JSON.parse(dec.decode(out));
+  if (!parsed.ok) throw new Error(parsed.error);
+  return parsed.data;
+}
+
+const MARKET_JSON = JSON.stringify({
+  market_id: "NEAR-USDC",
+  base_token: "nep141:wrap.near",
+  quote_token: "nep141:usdc.near",
+  lot_size_base: "1",
+  quote_per_tick_lot: "1"
+});
+
+const SCENARIOS = [
+  {
+    title: "Simple match", sub: "One sell, one buy at the same price",
+    note: "Look at the fill: it happens at the resting order's price (100) and produces one settlement pair.",
+    msgs: [
+      ["s1", "alice.test", "sell", 100, 10, "gtc"],
+      ["b1", "bob.test", "buy", 100, 10, "gtc"]
+    ]
+  },
+  {
+    title: "Price-time priority", sub: "A buy sweeps two price levels",
+    note: "The buy at 102 meets the cheapest ask first (100, oldest first), then 101. It pays each maker's price, not its own limit, and rests with what is left.",
+    msgs: [
+      ["s1", "alice.test", "sell", 101, 4, "gtc"],
+      ["s2", "carol.test", "sell", 100, 3, "gtc"],
+      ["s3", "alice.test", "sell", 100, 2, "gtc"],
+      ["b1", "bob.test", "buy", 102, 12, "gtc"]
+    ]
+  },
+  {
+    title: "Self-trade", sub: "Same account on both sides",
+    note: "alice's buy would hit her own sell. The newest order is cancelled instead (cancelled_lots = 5), nothing trades, and her resting sell stays.",
+    msgs: [
+      ["s1", "alice.test", "sell", 100, 5, "gtc"],
+      ["b1", "alice.test", "buy", 100, 5, "gtc"]
+    ]
+  },
+  {
+    title: "Post-only rejected", sub: "A maker-only order that would cross",
+    note: "Post-only never takes liquidity. Because bob's ask is at 100, alice's post-only buy at 100 is rejected with post_only_would_cross.",
+    msgs: [
+      ["s1", "bob.test", "sell", 100, 5, "gtc"],
+      ["b1", "alice.test", "buy", 100, 5, "post_only"]
+    ]
+  },
+  {
+    title: "IOC remainder", sub: "Fill what is there, cancel the rest",
+    note: "Only 3 lots are available. The IOC buy fills 3 and cancels the other 7 instead of resting.",
+    msgs: [
+      ["s1", "alice.test", "sell", 100, 3, "gtc"],
+      ["b1", "bob.test", "buy", 100, 10, "ioc"]
+    ]
+  }
+];
+
+function orderMsg(id, account, side, price, qty, tif) {
+  return { type: "order", id, account, side, price_ticks: price, qty_lots: qty, tif };
+}
+
+function describe(m) {
+  if (m.type === "cancel") return `${m.account} cancels ${m.id}`;
+  const tif = { gtc: "GTC", ioc: "IOC", post_only: "post-only" }[m.tif];
+  return `${m.account} ${m.side.toUpperCase()} ${m.qty_lots} @ ${m.price_ticks} · ${tif} · id ${m.id}`;
+}
+
+function quoteAmount(qty, price) {
+  return BigInt(qty) * BigInt(price) * BigInt(market.quote_per_tick_lot);
+}
+function baseAmount(qty) {
+  return BigInt(qty) * BigInt(market.lot_size_base);
+}
+const short = (t) => t.replace(/^nep141:/, "");
+
+function startSession() {
+  const data = call(0, MARKET_JSON);
+  market = data.market;
+  steps = [];
+  pairs = [];
+  nextN = 1;
+  $("oid").value = "o1";
+  $("market-name").textContent = market.market_id;
+  renderBook(data.book);
+  renderLog();
+  renderSettlements();
+  $("err").textContent = "";
+}
+
+function submit(msg) {
+  const out = call(1, JSON.stringify(msg));
+  steps.push({ n: steps.length + 1, msg, out });
+  out.settlements.forEach((s, i) => pairs.push({ fill: out.fills[i], s }));
+  renderBook(out.book);
+  renderLog();
+  renderSettlements();
+  return out;
+}
+
+function renderBook(book) {
+  const root = $("book");
+  const all = [...book.asks, ...book.bids];
+  const max = Math.max(1, ...all.map((l) => Number(l.total_lots)));
+  const level = (l, cls) => `
+    <div class="lvl ${cls}"><div class="bar" style="width:${Math.max(4, (Number(l.total_lots) / max) * 100)}%"></div>
+      <span class="px mono">${l.price_ticks}</span><span class="qty mono">${l.total_lots} lots</span>
+      <span class="ords">${l.orders.map((o) => `<span class="ord mono">${esc(o.id)} · ${esc(o.account)} · ${o.qty_lots}</span>`).join("")}</span></div>`;
+  let html = "";
+  html += book.asks.length ? [...book.asks].reverse().map((l) => level(l, "ask")).join("") : `<div class="empty">No asks</div>`;
+  const bid = book.bids[0], ask = book.asks[0];
+  html += `<div class="spread">${bid && ask ? `best bid ${bid.price_ticks} · best ask ${ask.price_ticks} · spread ${ask.price_ticks - bid.price_ticks}` : "no two-sided market"}</div>`;
+  html += book.bids.length ? book.bids.map((l) => level(l, "bid")).join("") : `<div class="empty">No bids</div>`;
+  root.innerHTML = html;
+
+  const sel = $("cancel-id");
+  const orders = [...book.asks, ...book.bids].flatMap((l) => l.orders.map((o) => ({ id: o.id, account: o.account })));
+  sel.innerHTML = orders.length
+    ? orders.map((o) => `<option value="${esc(o.id)}">${esc(o.id)} (${esc(o.account)})</option>`).join("")
+    : `<option value="">no resting orders</option>`;
+}
+
+function renderLog() {
+  const root = $("log");
+  if (!steps.length) {
+    root.innerHTML = `<div class="empty">No orders yet. Submit one or pick a scenario.</div>`;
+    return;
+  }
+  root.innerHTML = [...steps].reverse().map(({ n, msg, out }) => {
+    const a = out.ack;
+    const ok = a.status === "accepted";
+    const fills = out.fills.map((f) => {
+      const buyer = f.taker_side === "buy" ? f.taker_account : f.maker_account;
+      const seller = f.taker_side === "buy" ? f.maker_account : f.taker_account;
+      return `<div class="fill mono">fill #${f.seq}: ${esc(buyer)} buys ${baseAmount(f.qty_lots)} ${esc(short(market.base_token))} from ${esc(seller)} for ${quoteAmount(f.qty_lots, f.price_ticks)} ${esc(short(market.quote_token))} @ ${f.price_ticks}</div>`;
+    }).join("");
+    return `<div class="step">
+      <div class="top"><span class="n">#${n}</span><span class="msg">${esc(describe(msg))}</span>
+      <span class="badge ${ok ? "ok" : "rej"}">${ok ? "accepted" : "rejected"}${a.reason ? " · " + esc(a.reason) : ""}</span></div>
+      <div class="nums mono">filled ${a.filled_lots} · resting ${a.resting_lots} · cancelled ${a.cancelled_lots}</div>${fills}</div>`;
+  }).join("");
+}
+
+function diffRows(diff) {
+  return Object.entries(diff).map(([token, amt]) => {
+    const neg = amt.startsWith("-");
+    return `<div class="kv mono"><span>${esc(short(token))}</span><span class="${neg ? "neg" : "pos"}">${neg ? "−" + esc(amt.slice(1)) : "+" + esc(amt)}</span></div>`;
+  }).join("");
+}
+
+function balanced(pair) {
+  const sums = {};
+  for (const d of [pair.buyer_draft, pair.seller_draft]) {
+    for (const it of d.intents) {
+      for (const [t, a] of Object.entries(it.diff)) sums[t] = (sums[t] || 0n) + BigInt(a);
+    }
+  }
+  return Object.values(sums).every((v) => v === 0n);
+}
+
+function renderSettlements() {
+  const root = $("settlements");
+  if (!pairs.length) {
+    root.innerHTML = `<div class="empty">Fills appear here as pairs of <code>token_diff</code> intents.</div>`;
+    return;
+  }
+  root.innerHTML = pairs.map(({ fill, s }, idx) => {
+    if (s.error) return `<div class="pair"><div class="tools">Fill #${fill.seq}: ${esc(s.error)}</div></div>`;
+    const ok = balanced(s);
+    const draft = (title, d) => `<div class="draft"><h3>${title}</h3>
+      <div class="kv"><span>signer_id</span><span class="mono">${esc(d.signer_id)}</span></div>
+      <div class="kv"><span>deadline</span><span class="mono">${esc(d.deadline)}</span></div>
+      <div style="margin-top:6px"><div class="mono" style="color:var(--muted)">intent: token_diff</div>${diffRows(d.intents[0].diff)}</div></div>`;
+    return `<details class="pair" ${idx === pairs.length - 1 ? "open" : ""}>
+      <summary><span>Fill #${s.fill_seq}</span><span class="mono" style="font-weight:400">${esc(s.buyer)} ⇄ ${esc(s.seller)}</span>
+      <span class="badge ${ok ? "ok" : "rej"}">${ok ? "nets to zero" : "UNBALANCED"}</span></summary>
+      <div class="body">${draft("Buyer draft", s.buyer_draft)}${draft("Seller draft", s.seller_draft)}</div>
+      <div class="tools"><button class="small" data-copy="${idx}">Copy JSON</button><span class="hint" style="margin:0" id="copied-${idx}"></span></div>
+    </details>`;
+  }).join("");
+  root.querySelectorAll("[data-copy]").forEach((b) => b.addEventListener("click", async () => {
+    const i = Number(b.dataset.copy);
+    const text = JSON.stringify(pairs[i].s, null, 2);
+    try { await navigator.clipboard.writeText(text); $("copied-" + i).textContent = "Copied."; }
+    catch { $("copied-" + i).textContent = "Copy not available here."; }
+  }));
+}
+
+function runConformance() {
+  const results = call(2, "");
+  const pass = results.filter((r) => r.ok).length;
+  $("vecs").innerHTML = results.map((r) =>
+    `<li><span class="${r.ok ? "y" : "n"}" aria-hidden="true">${r.ok ? "✓" : "✗"}</span><span class="mono">${esc(r.name)}${r.error ? " — " + esc(r.error) : ""}</span></li>`).join("");
+  const chip = $("chip-conf");
+  chip.className = "chip " + (pass === results.length ? "good" : "bad");
+  chip.innerHTML = `<b>${pass}/${results.length}</b> conformance vectors pass in this browser`;
+}
+
+function setError(text) { $("err").textContent = text || ""; }
+
+function currentOrder() {
+  const side = document.querySelector('input[name="side"]:checked').value;
+  return orderMsg($("oid").value.trim(), $("account").value, side,
+    Number($("price").value), Number($("qty").value), $("tif").value);
+}
+
+function bumpId() {
+  nextN += 1;
+  $("oid").value = "o" + nextN;
+}
+
+function wire() {
+  $("order-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    setError("");
+    $("scenario-note").textContent = "";
+    try {
+      const m = currentOrder();
+      if (!Number.isSafeInteger(m.price_ticks) || !Number.isSafeInteger(m.qty_lots)) throw new Error("price and quantity must be whole numbers");
+      submit(m);
+      bumpId();
+    } catch (err) { setError(err.message); }
+  });
+  $("cancel-btn").addEventListener("click", () => { $("cancel-row").hidden = !$("cancel-row").hidden; });
+  $("cancel-go").addEventListener("click", () => {
+    setError("");
+    const id = $("cancel-id").value;
+    if (!id) { setError("There is no resting order to cancel."); return; }
+    try { submit({ type: "cancel", id, account: $("account").value }); } catch (err) { setError(err.message); }
+  });
+  $("reset").addEventListener("click", () => { startSession(); $("scenario-note").textContent = ""; });
+  $("export").addEventListener("click", () => {
+    try {
+      const text = call(3, "");
+      const url = URL.createObjectURL(new Blob([text], { type: "application/x-ndjson" }));
+      const a = document.createElement("a");
+      a.href = url; a.download = "orders.jsonl";
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (err) { setError(err.message); }
+  });
+  $("conf-run").addEventListener("click", runConformance);
+  $("scenarios").innerHTML = SCENARIOS.map((s, i) =>
+    `<button data-i="${i}">${esc(s.title)}<small>${esc(s.sub)}</small></button>`).join("");
+  $("scenarios").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => {
+    const sc = SCENARIOS[Number(b.dataset.i)];
+    startSession();
+    for (const m of sc.msgs) submit(orderMsg(...m));
+    nextN = sc.msgs.length + 1;
+    $("oid").value = "o" + nextN;
+    $("scenario-note").textContent = sc.note;
+  }));
+}
+
+async function sha256Hex(bytes) {
+  const d = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(d)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function boot() {
+  try {
+    const bytes = b64ToBytes($("wasm-b64").textContent.trim());
+    const { instance } = await WebAssembly.instantiate(bytes, {});
+    wasm = instance.exports;
+    let hash = "";
+    try { hash = (await sha256Hex(bytes)).slice(0, 12); } catch { hash = ""; }
+    const kb = Math.round(bytes.length / 1024);
+    $("chip-wasm").parentElement.innerHTML = `<b>WebAssembly ${kb} KB</b>${hash ? ` · sha256 <span class="mono">${hash}…</span>` : ""}`;
+    const conf = document.createElement("span");
+    conf.id = "chip-conf"; conf.className = "chip";
+    $("chips").appendChild(conf);
+    const off = document.createElement("span");
+    off.className = "chip"; off.innerHTML = "<b>Offline</b> · no network, no keys";
+    $("chips").appendChild(off);
+    wire();
+    startSession();
+    runConformance();
+  } catch (err) {
+    $("chips").innerHTML = `<span class="chip bad">Could not start WebAssembly: ${esc(err.message)}</span>`;
+  }
+}
+boot();
+</script>
+</body>
+</html>

@@ -6,8 +6,18 @@ members = [
     "crates/matcher-stub",
     "crates/settlement",
     "crates/terra-cli",
+    "crates/web-demo",
 ]
 
 [workspace.package]
 edition = "2021"
 license = "MIT"
+
+# Small WebAssembly build for the browser demo: `cargo build -p terra-web --target wasm32-unknown-unknown --profile wasm`
+[profile.wasm]
+inherits = "release"
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

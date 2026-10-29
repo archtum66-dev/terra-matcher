@@ -3,4 +3,4 @@
 mod matcher;
 mod validate;
 
-pub use matcher::StubMatcher;
+pub use matcher::{BookLevel, BookOrder, BookView, StubMatcher};

@@ -3,8 +3,32 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use matcher_api::{
     Ack, Cancel, Fill, Market, Matcher, Message, Order, RejectReason, Side, Status, Tif,
 };
+use serde::Serialize;
 
 use crate::validate::{validate_order_fields, validate_order_id};
+
+/// One resting order as shown by [`StubMatcher::book_view`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct BookOrder {
+    pub id: String,
+    pub account: String,
+    pub qty_lots: u64,
+}
+
+/// One price level, orders in time priority (oldest first).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct BookLevel {
+    pub price_ticks: u64,
+    pub total_lots: u128,
+    pub orders: Vec<BookOrder>,
+}
+
+/// Read-only snapshot of the book. `bids` are best (highest) first, `asks` best (lowest) first.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct BookView {
+    pub bids: Vec<BookLevel>,
+    pub asks: Vec<BookLevel>,
+}
 
 #[derive(Debug, Clone)]
 struct RestingOrder {
@@ -305,6 +329,39 @@ impl StubMatcher {
             cancelled_lots: resting.qty_lots,
         };
         (ack, Vec::new())
+    }
+
+    /// Read-only snapshot of all resting orders (used by the web demo and tests).
+    pub fn book_view(&self) -> BookView {
+        fn level(price: u64, queue: &VecDeque<RestingOrder>) -> BookLevel {
+            BookLevel {
+                price_ticks: price,
+                total_lots: queue.iter().map(|o| u128::from(o.qty_lots)).sum(),
+                orders: queue
+                    .iter()
+                    .map(|o| BookOrder {
+                        id: o.id.clone(),
+                        account: o.account.clone(),
+                        qty_lots: o.qty_lots,
+                    })
+                    .collect(),
+            }
+        }
+        BookView {
+            bids: self
+                .buys
+                .iter()
+                .rev()
+                .filter(|(_, q)| !q.is_empty())
+                .map(|(&p, q)| level(p, q))
+                .collect(),
+            asks: self
+                .sells
+                .iter()
+                .filter(|(_, q)| !q.is_empty())
+                .map(|(&p, q)| level(p, q))
+                .collect(),
+        }
     }
 
     /// Exposed for invariant tests.

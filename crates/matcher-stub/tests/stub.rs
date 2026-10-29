@@ -183,3 +183,41 @@ fn random_messages_invariants() {
         check_invariants(&matcher, &fill_qty_by_order, &order_qty);
     }
 }
+
+#[test]
+fn book_view_lists_levels_best_first_in_time_priority() {
+    let market: Market = serde_json::from_str(
+        r#"{"market_id":"NEAR-USDC","base_token":"nep141:wrap.near","quote_token":"nep141:usdc.near","lot_size_base":"1","quote_per_tick_lot":"1"}"#,
+    )
+    .expect("market");
+    let mut matcher = StubMatcher::new(market);
+    let orders = [
+        r#"{"type":"order","id":"s1","account":"alice.test","side":"sell","price_ticks":102,"qty_lots":4,"tif":"gtc"}"#,
+        r#"{"type":"order","id":"s2","account":"carol.test","side":"sell","price_ticks":101,"qty_lots":3,"tif":"gtc"}"#,
+        r#"{"type":"order","id":"s3","account":"alice.test","side":"sell","price_ticks":101,"qty_lots":2,"tif":"gtc"}"#,
+        r#"{"type":"order","id":"b1","account":"bob.test","side":"buy","price_ticks":99,"qty_lots":5,"tif":"gtc"}"#,
+        r#"{"type":"order","id":"b2","account":"bob.test","side":"buy","price_ticks":98,"qty_lots":1,"tif":"gtc"}"#,
+    ];
+    for line in orders {
+        let msg: Message = serde_json::from_str(line).expect("message");
+        matcher.process(msg);
+    }
+    let view = matcher.book_view();
+    let ask_prices: Vec<u64> = view.asks.iter().map(|l| l.price_ticks).collect();
+    let bid_prices: Vec<u64> = view.bids.iter().map(|l| l.price_ticks).collect();
+    assert_eq!(ask_prices, vec![101, 102]);
+    assert_eq!(bid_prices, vec![99, 98]);
+    assert_eq!(view.asks[0].total_lots, 5);
+    let ids: Vec<&str> = view.asks[0].orders.iter().map(|o| o.id.as_str()).collect();
+    assert_eq!(ids, vec!["s2", "s3"], "oldest first within a level");
+
+    // A cancel removes the order and an emptied level disappears.
+    let cancel: Message =
+        serde_json::from_str(r#"{"type":"cancel","id":"s1","account":"alice.test"}"#).expect("c");
+    matcher.process(cancel);
+    let view = matcher.book_view();
+    assert_eq!(view.asks.len(), 1);
+    let (bid, ask) = matcher.best_bid_ask();
+    assert_eq!(Some(view.bids[0].price_ticks), bid);
+    assert_eq!(Some(view.asks[0].price_ticks), ask);
+}
