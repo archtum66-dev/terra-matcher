@@ -29,10 +29,18 @@ cargo run -p terra-cli -- settle --market examples/market.json --orders examples
 
 Each fill produces exactly one **pair** of unsigned `token_diff` intent drafts (buyer and seller). Amounts follow fixed lots from `base_amount` and `quote_amount`. The settlement crate checks that token sums are zero before output. Nothing is signed in this repo. Quote requests built or sent through the 1Click client always use `"dry": true`.
 
+## Escrow contract
+
+The NEAR testnet escrow holds NEP-141 deposits as free balances, verifies ed25519-signed limit orders, and applies fills when anyone calls `settle`. Rules, error strings, and events are defined in `docs/ESCROW.md`. For a manual testnet checklist (placeholders only), see `docs/TESTNET.md`.
+
+1. Run `cargo test --all` from the repository root — runs matcher, settlement, and `escrow-types` tests (requires Rust; not run in the agent environment that drafted this section).
+2. Run `cd contract/escrow && cargo test` — runs escrow unit tests with `near_sdk::test_utils` (same Rust requirement).
+
 ## Crates
 
 | Crate | Role |
 |---|---|
+| `escrow-types` | Canonical signed-order JSON, fill amount helpers, optional order hash |
 | `matcher-api` | Types, `Matcher` trait, amount helpers, conformance runner |
 | `matcher-stub` | Public reference matcher (`StubMatcher`) |
 | `settlement` | Fill → `token_diff` pair, wallet message helpers, dry quote client |
@@ -40,7 +48,6 @@ Each fill produces exactly one **pair** of unsigned `token_diff` intent drafts (
 
 ## Not here yet
 
-- NEAR contract
 - Hosted demo
 - Live verifier or 1Click integration in default builds (use `settlement` / `terra-cli` `http` feature only when you intentionally call the public quote API with `ONECLICK_API_KEY`)
 

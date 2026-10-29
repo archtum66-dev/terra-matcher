@@ -1,0 +1,1 @@
+{"v":1,"contract_id":"escrow.example.testnet","account_id":"alice.testnet","base_token":"base.testnet","quote_token":"quote.testnet","lot_size_base":"1000000","quote_per_tick_lot":"10","side":"buy","price_ticks":100,"qty_lots":5,"expiry_ns":"1793000000000000000","nonce":"1"}
