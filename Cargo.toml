@@ -1,0 +1,12 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/matcher-api",
+    "crates/matcher-stub",
+    "crates/terra-cli",
+]
+license = "MIT"
+
+[workspace.package]
+edition = "2021"
+license = "MIT"

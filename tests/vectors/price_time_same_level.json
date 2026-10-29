@@ -1,0 +1,94 @@
+{
+  "name": "price_time_same_level",
+  "market": {
+    "market_id": "NEAR-USDC",
+    "base_token": "nep141:wrap.near",
+    "quote_token": "nep141:usdc.near",
+    "lot_size_base": "1",
+    "quote_per_tick_lot": "1"
+  },
+  "input": [
+    {
+      "type": "order",
+      "id": "s1",
+      "account": "alice.near",
+      "side": "sell",
+      "price_ticks": 100,
+      "qty_lots": 3,
+      "tif": "gtc"
+    },
+    {
+      "type": "order",
+      "id": "s2",
+      "account": "bob.near",
+      "side": "sell",
+      "price_ticks": 100,
+      "qty_lots": 3,
+      "tif": "gtc"
+    },
+    {
+      "type": "order",
+      "id": "b1",
+      "account": "carl.near",
+      "side": "buy",
+      "price_ticks": 100,
+      "qty_lots": 4,
+      "tif": "gtc"
+    }
+  ],
+  "expected": [
+    {
+      "ack": {
+        "id": "s1",
+        "status": "accepted",
+        "filled_lots": 0,
+        "resting_lots": 3,
+        "cancelled_lots": 0
+      }
+    },
+    {
+      "ack": {
+        "id": "s2",
+        "status": "accepted",
+        "filled_lots": 0,
+        "resting_lots": 3,
+        "cancelled_lots": 0
+      }
+    },
+    {
+      "ack": {
+        "id": "b1",
+        "status": "accepted",
+        "filled_lots": 4,
+        "resting_lots": 0,
+        "cancelled_lots": 0
+      }
+    },
+    {
+      "fill": {
+        "seq": 1,
+        "market_id": "NEAR-USDC",
+        "taker_id": "b1",
+        "maker_id": "s1",
+        "taker_account": "carl.near",
+        "maker_account": "alice.near",
+        "taker_side": "buy",
+        "price_ticks": 100,
+        "qty_lots": 3
+      }
+    },
+    {
+      "fill": {
+        "seq": 2,
+        "market_id": "NEAR-USDC",
+        "taker_id": "b1",
+        "maker_id": "s2",
+        "taker_account": "carl.near",
+        "maker_account": "bob.near",
+        "taker_side": "buy",
+        "price_ticks": 100,
+        "qty_lots": 1
+      }
+    }
+  ]
+}

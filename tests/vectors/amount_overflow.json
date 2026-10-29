@@ -1,0 +1,33 @@
+{
+  "name": "amount_overflow",
+  "market": {
+    "market_id": "NEAR-USDC",
+    "base_token": "nep141:wrap.near",
+    "quote_token": "nep141:usdc.near",
+    "lot_size_base": "340282366920938463463374607431768211455",
+    "quote_per_tick_lot": "1"
+  },
+  "input": [
+    {
+      "type": "order",
+      "id": "big",
+      "account": "alice.near",
+      "side": "sell",
+      "price_ticks": 1,
+      "qty_lots": 2,
+      "tif": "gtc"
+    }
+  ],
+  "expected": [
+    {
+      "ack": {
+        "id": "big",
+        "status": "rejected",
+        "reason": "amount_overflow",
+        "filled_lots": 0,
+        "resting_lots": 0,
+        "cancelled_lots": 0
+      }
+    }
+  ]
+}

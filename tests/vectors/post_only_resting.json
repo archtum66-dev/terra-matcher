@@ -1,0 +1,32 @@
+{
+  "name": "post_only_resting",
+  "market": {
+    "market_id": "NEAR-USDC",
+    "base_token": "nep141:wrap.near",
+    "quote_token": "nep141:usdc.near",
+    "lot_size_base": "1",
+    "quote_per_tick_lot": "1"
+  },
+  "input": [
+    {
+      "type": "order",
+      "id": "b1",
+      "account": "bob.near",
+      "side": "buy",
+      "price_ticks": 90,
+      "qty_lots": 5,
+      "tif": "post_only"
+    }
+  ],
+  "expected": [
+    {
+      "ack": {
+        "id": "b1",
+        "status": "accepted",
+        "filled_lots": 0,
+        "resting_lots": 5,
+        "cancelled_lots": 0
+      }
+    }
+  ]
+}
