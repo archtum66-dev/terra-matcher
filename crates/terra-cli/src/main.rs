@@ -198,13 +198,10 @@ fn next_arg(args: &[String], i: usize, flag: &str) -> Result<String, String> {
 }
 
 fn parse_match_args(args: &[String]) -> Result<(String, String), String> {
-    if args.len() != 5 {
+    if args.len() != 5 || args[0] != "match" || args[1] != "--market" || args[3] != "--orders" {
         return Err("expected: match --market <path> --orders <path>".to_string());
     }
-    if args[0] != "match" || args[2] != "--market" || args[4] != "--orders" {
-        return Err("expected: match --market <path> --orders <path>".to_string());
-    }
-    Ok((args[1].clone(), args[3].clone()))
+    Ok((args[2].clone(), args[4].clone()))
 }
 
 #[cfg(feature = "http")]
