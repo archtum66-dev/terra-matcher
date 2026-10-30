@@ -27,15 +27,20 @@ cd contract/escrow
 cargo near build non-reproducible-wasm
 ```
 
-Alternative:
+Alternative with plain cargo (the flag `--cfg near` is required, see below):
 
 ```bash
-cargo build --target wasm32-unknown-unknown --release
+cd contract/escrow
+RUSTFLAGS="--cfg near" cargo build --target wasm32-unknown-unknown --release
 ```
+
+In PowerShell: `$env:RUSTFLAGS = "--cfg near"` before `cargo build`.
+
+**Why `--cfg near`:** the NEAR SDK has two modes. With the flag (set by `cargo near build`) the contract uses the chain's host functions: contract errors keep their text (for example `overfill`) and hashing runs on the chain. Without it the file still runs, but every contract error shows only `WebAssembly trap: An unreachable opcode was executed`, and hashing runs in the contract code (larger file, more gas). `testnet/2-check-wasm.ps1` and the preflight reject a file that was built without the flag.
 
 Artifact path depends on the tool (typically `target/near/escrow.wasm` or `target/wasm32-unknown-unknown/release/escrow.wasm`).
 
-The plain `cargo build` variant was built in the drafting environment (about 360 KB); `cargo near build` was not run.
+The plain `cargo build` variant with `--cfg near` was built in the drafting environment (about 343 KB); `cargo near build` was not run.
 
 ## 3. Deploy
 

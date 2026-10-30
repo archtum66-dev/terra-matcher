@@ -109,7 +109,10 @@ function Deploy-Contract {
     if (-not $DryRun) {
         $initText = [string]$init.StdOut + "`n" + [string]$init.StdErr
         if (($init.ExitCode -ne 0) -or (Test-NearOutputFailed -Text $initText)) {
-            if ((Remove-AnsiCodes -Text $initText) -match 'already been initialized') {
+            # `new` takes no deposit here, so its only failure is "already initialised". A file built without
+            # --cfg near shows that as a bare "unreachable" trap, a proper build with the message.
+            $cleanInit = Remove-AnsiCodes -Text $initText
+            if (($cleanInit -match 'already been initialized') -or ($cleanInit -match 'unreachable')) {
                 Write-Host "state of $Account was already initialised; kept as it is"
             } else {
                 throw "the init call on $Account failed (see the output above)"

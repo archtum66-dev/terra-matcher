@@ -22,7 +22,7 @@ Result: `testnet\results\summary.md` (every transaction with gas and a testnet.n
 |---|---|---|
 | 0 | `0-check-tools.ps1` | Read-only preflight |
 | 1 | `1-create-accounts.ps1 -Prefix <p>` | Five accounts via the faucet: escrow, alice, bob, base token, quote token. Keys go to the Windows keychain. |
-| 2 | `2-check-wasm.ps1` | Sizes and SHA-256 of both WASM files, storage estimate. `-Build` builds them with Rust and the `wasm32-unknown-unknown` target. |
+| 2 | `2-check-wasm.ps1` | Sizes and SHA-256 of both WASM files, storage estimate, and a check that they were built for the chain (`--cfg near`). `-Build` builds them with Rust (`RUSTFLAGS=--cfg near`, target `wasm32-unknown-unknown`). |
 | 3 | `3-deploy.ps1` | Deploys escrow and both tokens, calls `new` in a separate transaction, checks with views. |
 | 4 | `4-register-keys.ps1` | Creates alice's and bob's order keys outside the repo and calls `register_key`. |
 | 5 | `5-deposit.ps1` | NEP-145 storage deposits, mints test tokens, `ft_transfer_call` into the escrow, checks the balances. |
@@ -57,11 +57,12 @@ terra-keys verify-order --signed-order-file orders\buy.json --key-file <KEY>
 
 ## Costs
 
-Account creation is funded by the testnet faucet. Contract storage is bound at about 1 NEAR per 100 KB of code (about 3.7 NEAR for the escrow, 3.1 NEAR for each token), plus small storage deposits in step 5. Whether the faucet still funds this much is only known after step 1.
+Account creation is funded by the testnet faucet. Contract storage is bound at about 1 NEAR per 100 KB of code (about 3.5 NEAR for the escrow, 3.0 NEAR for each token), plus small storage deposits in step 5. Whether the faucet still funds this much is only known after step 1.
 
 ## Lessons from the first live run
 
 - **Argument names are the JSON keys.** The NEAR SDK reads the call arguments by the Rust parameter names. A parameter written `_msg` (to silence an unused-variable warning) is read as the key `_msg`, so the token's `ft_on_transfer(sender_id, amount, msg)` call cannot be read, the contract panics and the token refunds the full amount. Unit tests that call the Rust method directly do not see this. Two tests now check the generated call arguments and the source for underscore-prefixed parameters of exported methods.
+- **Build the contracts with `RUSTFLAGS=--cfg near`.** A plain `cargo build --target wasm32-unknown-unknown` compiles, deploys and runs, but the SDK then uses guest-side fallbacks: contract errors show only `unreachable` (the second live start of step 3 stopped on exactly that: the already-initialised `new` call gave no text) and hashing costs more gas. Step 2 and the preflight now reject such a file; step 3 also treats a bare `unreachable` from `new` as "already initialised".
 - Receipts of other contracts are not shown by near-cli-rs; whether a deposit arrived is checked with the view `balance_of` and, on a timeout, with the token balance of the sender (tokens back = refunded).
 
 ## Remaining risks

@@ -98,7 +98,10 @@ try {
         if ($bytes.Length -lt 8 -or $bytes[0] -ne 0 -or $bytes[1] -ne 0x61 -or $bytes[2] -ne 0x73 -or $bytes[3] -ne 0x6d) {
             throw "$f is not a WASM file"
         }
-        Show-Check -Level 'ok' -Name $f -Detail ("{0} bytes" -f $bytes.Length)
+        if (-not (Test-WasmBuiltForChain -Bytes $bytes)) {
+            throw "$f was built without --cfg near: contract errors would show only 'unreachable'. Build with RUSTFLAGS=--cfg near (see README)"
+        }
+        Show-Check -Level 'ok' -Name $f -Detail ("{0} bytes, built for the chain" -f $bytes.Length)
     }
 } catch {
     Show-Check -Level 'FAIL' -Name 'WASM files' -Detail $_.Exception.Message

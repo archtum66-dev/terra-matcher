@@ -515,6 +515,18 @@ function Get-DefaultWasmDir {
     return (Join-Path $PSScriptRoot 'wasm')
 }
 
+function Test-WasmBuiltForChain {
+    # True when the WASM was built with `--cfg near`: only then the SDK imports the host function panic_utf8
+    # (contract errors keep their text) and hashes through the chain instead of guest code. Without the flag the
+    # file still runs, but every contract error shows only "unreachable" and costs more gas.
+    param(
+        [Parameter(Mandatory = $true)]
+        [byte[]]$Bytes
+    )
+    $text = [System.Text.Encoding]::ASCII.GetString($Bytes)
+    return $text.Contains('panic_utf8')
+}
+
 function Invoke-CheckWasm {
     param(
         [string]$WasmDir,
@@ -562,9 +574,16 @@ function Invoke-CheckWasm {
                 '--release'
             )
             if ($DryRun) {
-                Write-Host "[dry-run] cargo $($buildArgs -join ' ')"
+                Write-Host "[dry-run] RUSTFLAGS=--cfg near cargo $($buildArgs -join ' ')"
             } else {
-                $br = Invoke-Native -FilePath $cargo.Source -ArgumentList $buildArgs
+                # `--cfg near` makes the SDK use the chain's host functions (see Test-WasmBuiltForChain)
+                $oldFlags = $env:RUSTFLAGS
+                $env:RUSTFLAGS = '--cfg near'
+                try {
+                    $br = Invoke-Native -FilePath $cargo.Source -ArgumentList $buildArgs
+                } finally {
+                    $env:RUSTFLAGS = $oldFlags
+                }
                 if ($br.ExitCode -ne 0) {
                     throw "cargo build failed for $($t.Out)"
                 }
@@ -585,6 +604,9 @@ Run 2-check-wasm.ps1 -Build with Rust installed, or copy built artifacts into te
         $bytes = [System.IO.File]::ReadAllBytes($pair.Path)
         if ($bytes.Length -lt 4 -or $bytes[0] -ne 0 -or $bytes[1] -ne 97 -or $bytes[2] -ne 115 -or $bytes[3] -ne 109) {
             throw "$($pair.Label): invalid WASM magic bytes"
+        }
+        if (-not (Test-WasmBuiltForChain -Bytes $bytes)) {
+            throw "$($pair.Label): built without --cfg near (contract errors would show only 'unreachable'). Build with RUSTFLAGS=--cfg near, see testnet\README.md"
         }
         $sha = [System.Security.Cryptography.SHA256]::Create()
         $hashBytes = $sha.ComputeHash($bytes)

@@ -11,7 +11,7 @@ Everything here is measured with commands in this repository. Nothing is estimat
 | How big is one settlement? | same command, field `settlement_pair_json_bytes_avg` | **407 bytes** of JSON per fill (buyer and seller draft together) |
 | Does the browser demo match the command line? | 3000 random messages through the WebAssembly module and through `terra match` | **byte-identical** output (4157 lines, 1157 fills, 688 rejections) |
 | How large is the browser module? | `cargo build -p terra-web --target wasm32-unknown-unknown --profile wasm --locked` | **267 KB** (the whole demo page, module included, is 383 KB) |
-| How large is the escrow contract? | `cd contract/escrow && cargo build --target wasm32-unknown-unknown --release` | **360 KB** wasm |
+| How large is the escrow contract? | `cd contract/escrow && RUSTFLAGS="--cfg near" cargo build --target wasm32-unknown-unknown --release` | **343 KB** wasm |
 
 ## The order flow
 
