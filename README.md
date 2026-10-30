@@ -15,6 +15,17 @@ Open **`web/index.html`** in any current browser. It is one self-contained file:
 
 The page embeds a 267 KB module built from `crates/web-demo`. `python3 web/build.py --check` fails unless the committed page equals a fresh build, see "Rebuild the demo" below.
 
+## For judges: four checks, five minutes
+
+| Do | See |
+|---|---|
+| Open **`web/index.html`** in a browser | the order book, the fills and the unsigned `token_diff` pairs; the chip shows **22/22 conformance vectors pass** |
+| Run **`cargo test --all`** | **57 tests pass**, offline |
+| Run **`python3 testnet/check-onchain.py`** | **`OK`**: the escrow on NEAR testnet (`ag2610-escrow.testnet`) has the code hash of the file in `testnet/wasm/SHA256SUMS.txt` |
+| Open the transaction links in **`docs/BENCHMARKS.md`** | real testnet trades: `settle` about **4.4 Tgas**, `withdraw` about **7 Tgas**, an overfill **rejected** with `overfill` |
+
+The on-chain check is one read-only call to a public RPC. Without Python, the same hash comes from `curl -s https://test.rpc.fastnear.com -H 'content-type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"query","params":{"request_type":"view_account","finality":"final","account_id":"ag2610-escrow.testnet"}}'` (field `code_hash`; `CqNy4yyFdW8FodZjFVyEYfxxmApygSYqmZzs5x9XLxjA`).
+
 ## Quick start
 
 1. Run `cargo test --all` from the repository root — all tests pass (conformance vectors, settlement balances, quote fixtures, determinism, invariant fuzz, amount checks).
@@ -103,7 +114,7 @@ The NEAR testnet escrow holds NEP-141 deposits as free balances, verifies ed2551
 | `crates/` | Rust crates (table above) |
 | `contract/escrow/` | NEAR testnet escrow contract (own Cargo workspace) |
 | `contract/test-token/` | Mintable NEP-141 test token without value (own Cargo workspace) |
-| `testnet/` | PowerShell run kit for testnet: accounts, deploy, keys, deposit, settle, withdraw |
+| `testnet/` | PowerShell run kit for testnet: accounts, deploy, keys, deposit, settle, withdraw; `check-onchain.py` compares the deployed code hash with `wasm/SHA256SUMS.txt` |
 | `web/` | Browser demo: `index.html` (built), `index.template.html`, `build.py` |
 | `tests/vectors/` | Public conformance vectors (JSON) |
 | `docs/` | `SPEC.md`, `BENCHMARKS.md`, `ESCROW.md`, `TESTNET.md`, `INTENTS_FACTS.md` |
@@ -121,8 +132,19 @@ Quote and settlement fixtures are hand-written from public documentation, not re
 
 ## Provenance
 
-Everything in this repository was written for this hackathon (first commit 29 October 2026). It sits in front of a private matching engine of the author that is not part of this repository and was not changed for the hackathon. The reference matcher here follows the same public interface; both were run on the same conformance vectors and on random messages, and their receipts, executions and best prices were identical.
+- **Window:** the first commit is from 29 October 2026; every commit lies inside the hackathon period.
+- **Pre-existing code in this repository:** none. Everything here was written for this hackathon. No project template or starter kit was used.
+- **Outside this repository:** a private matching engine of the author. It is not part of this submission and was not changed for the hackathon. The reference matcher here follows the same public interface; both were run on the same conformance vectors and on random messages, and their receipts, executions and best prices were identical.
+
+## Libraries and tools
+
+- **Rust crates:** `serde`, `serde_json`, `ed25519-dalek`, `rand_core`, `sha2`, `hex`, `near-sdk` 5, `near-contract-standards` 5, and `ureq` 2 (optional, only with `--features http`).
+- **Browser demo:** no library and no framework; the WebAssembly module is built from `crates/web-demo`.
+- **Testnet run kit:** PowerShell scripts and the separate binary `near-cli-rs` v0.30.1 (not included; see `testnet/README.md`).
+- **Test token:** a minimal NEP-141 contract on `near-contract-standards`, without value.
 
 ## AI assistance
 
-Parts of this repository were drafted with Cursor and Claude and reviewed by hand.
+- **Drafted with AI:** code and documents were drafted with Cursor (models Grok and Composer) and Claude.
+- **Checked by:** tests (57 plus 31), three recorded testnet runs, and one read-only review pass of the whole repository.
+- **Author:** set the scope, approved every step and ran the testnet transactions.
