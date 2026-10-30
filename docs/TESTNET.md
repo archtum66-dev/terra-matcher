@@ -2,7 +2,7 @@
 
 The scripted version of this guide (all seven steps, with preflight and dry run) is in [`testnet/README.md`](../testnet/README.md).
 
-This document is a **do X, see Y** guide for deploying and exercising the escrow contract with [near-cli-rs](https://github.com/near/near-cli-rs). **Live status:** a first run of the scripted version created the accounts, deployed the contracts, called `new`, registered keys and minted test tokens on testnet. The deposit step then showed that the escrow did not accept NEP-141 transfers: the argument of `ft_on_transfer` was named `_msg` in the Rust code, so the generated JSON reader expected a key `_msg`, the token's call (key `msg`) failed and the token refunded the whole amount. This is fixed (argument `msg`) and tested (`exported_argument_names_match_nep141`). The remaining steps (deposit, settle, withdraw) have not yet been recorded on testnet. The orders made by `terra-keys` are accepted by the contract code in a test (`contract/escrow/tests/cli_interop.rs`).
+This document is a **do X, see Y** guide for deploying and exercising the escrow contract with [near-cli-rs](https://github.com/near/near-cli-rs). **Live status:** the scripted version has run completely on testnet, twice (30 October 2026): accounts, deployment, keys, deposit, two fills, a rejected overfill and four withdrawals. The measured gas and the transaction links are in [`BENCHMARKS.md`](BENCHMARKS.md). The first attempts found two bugs that unit tests cannot see and that are now fixed and checked: the argument of `ft_on_transfer` was named `_msg`, so the generated JSON reader expected a key `_msg` and the token refunded every deposit (test `exported_argument_names_match_nep141`); and a build without `--cfg near` hid all contract error texts (step 2 and the preflight now reject such a file). The orders made by `terra-keys` are also accepted by the contract code in a test (`contract/escrow/tests/cli_interop.rs`).
 
 Replace placeholders: `<ESCROW_ACCOUNT>`, `<ALICE>`, `<BOB>`, `<BASE_TOKEN>`, `<QUOTE_TOKEN>`.
 
@@ -102,7 +102,7 @@ Anyone may call `settle`; signatures must verify against each trader's registere
 
 ## 7. Withdraw free balance
 
-Do attach **1 yoctoNEAR** and call `withdraw`, see `docs/ESCROW.md` section 2. `testnet/7-withdraw.ps1` withdraws all four escrow balances for Alice and Bob and writes `testnet/results/summary.md`. `withdraw` forwards 30 Tgas to the token's `ft_transfer` and 10 Tgas to its own callback, so attach at least 60 Tgas. These values are estimates; adjust them after the first live run.
+Do attach **1 yoctoNEAR** and call `withdraw`, see `docs/ESCROW.md` section 2. `testnet/7-withdraw.ps1` withdraws all four escrow balances for Alice and Bob and writes `testnet/results/summary.md`. `withdraw` forwards 30 Tgas to the token's `ft_transfer` and 10 Tgas to its own callback, so attach at least 60 Tgas. Measured on testnet: a whole `withdraw` burns about 6.95 Tgas in total.
 
 ```bash
 near contract call-function as-transaction <ESCROW_ACCOUNT> withdraw json-args '{"token_id":"<QUOTE_TOKEN>","amount":"<AMOUNT>","receiver_id":null}' prepaid-gas '100 Tgas' attached-deposit '1 yoctoNEAR' sign-as <ALICE> network-config testnet sign-with-keychain send

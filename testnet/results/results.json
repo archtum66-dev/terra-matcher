@@ -1,0 +1,142 @@
+[
+    {
+        "label":  "settle-1",
+        "signer":  "ag2610-base.testnet",
+        "method":  "settle",
+        "tx_hash":  "BnHFaRnwScUr1iLjgkcvyPbAvkVH4krpgkMSkNQe4Z6o",
+        "gas_burnt":  4359632369860,
+        "tokens_burnt":  "413644980736000000000",
+        "ok":  true,
+        "time_utc":  "2026-10-30T11:51:55Z"
+    },
+    {
+        "label":  "settle-2",
+        "signer":  "ag2610-base.testnet",
+        "method":  "settle",
+        "tx_hash":  "DcXcJWNf9GGojhV7r9oqHwnaXp7CY6Xpz59KocoQbz7P",
+        "gas_burnt":  4454527967182,
+        "tokens_burnt":  "423134540468200000000",
+        "ok":  true,
+        "time_utc":  "2026-10-30T11:52:01Z"
+    },
+    {
+        "label":  "settle-overfill-rejected",
+        "signer":  "ag2610-base.testnet",
+        "method":  "settle",
+        "tx_hash":  "",
+        "gas_burnt":  0,
+        "tokens_burnt":  "0",
+        "ok":  false,
+        "time_utc":  "2026-10-30T11:52:06Z"
+    },
+    {
+        "label":  "withdraw-alice-base",
+        "signer":  "ag2610-alice.testnet",
+        "method":  "withdraw",
+        "tx_hash":  "82yCZ3TkNSqnrwqoWdbhFUxS9b2cWrtc6RBFwjejkaH",
+        "gas_burnt":  6956666081542,
+        "tokens_burnt":  "628711839404200000000",
+        "ok":  true,
+        "time_utc":  "2026-10-30T11:52:14Z"
+    },
+    {
+        "label":  "withdraw-alice-quote",
+        "signer":  "ag2610-alice.testnet",
+        "method":  "withdraw",
+        "tx_hash":  "FgbpYqp7BEBux8AXNdnrFYrb6PoibJxF27BdPjZHMUvy",
+        "gas_burnt":  6953865029653,
+        "tokens_burnt":  "628431734215300000000",
+        "ok":  true,
+        "time_utc":  "2026-10-30T11:52:20Z"
+    },
+    {
+        "label":  "withdraw-bob-base",
+        "signer":  "ag2610-bob.testnet",
+        "method":  "withdraw",
+        "tx_hash":  "HFTCLHho5NzYVcPpTWRL76hNTn86EUJGGhiZ8Rbb8mLf",
+        "gas_burnt":  6954784833712,
+        "tokens_burnt":  "628523714621200000000",
+        "ok":  true,
+        "time_utc":  "2026-10-30T11:52:26Z"
+    },
+    {
+        "label":  "withdraw-bob-quote",
+        "signer":  "ag2610-bob.testnet",
+        "method":  "withdraw",
+        "tx_hash":  "FNaZ56BMBb4Nsaugsj4KpmAm81LF1gBmu8dLJQHm85LA",
+        "gas_burnt":  6947160198251,
+        "tokens_burnt":  "627761251075100000000",
+        "ok":  true,
+        "time_utc":  "2026-10-30T11:52:33Z"
+    },
+    {
+        "label":  "settle-1",
+        "signer":  "ag2610-base.testnet",
+        "method":  "settle",
+        "tx_hash":  "82WxXjhV2xQAWJrACmJnUMPnqLbpfdtTKk1nVk2ywvB6",
+        "gas_burnt":  4423384194554,
+        "tokens_burnt":  "420020163205400000000",
+        "ok":  true,
+        "time_utc":  "2026-10-30T15:55:40Z"
+    },
+    {
+        "label":  "settle-2",
+        "signer":  "ag2610-base.testnet",
+        "method":  "settle",
+        "tx_hash":  "8vqFdfBYzJhPh26D1sSpEsz1WoYJfwT5iqgXj1LJy8fx",
+        "gas_burnt":  4463851187914,
+        "tokens_burnt":  "424066862541400000000",
+        "ok":  true,
+        "time_utc":  "2026-10-30T15:55:45Z"
+    },
+    {
+        "label":  "settle-overfill-rejected",
+        "signer":  "ag2610-base.testnet",
+        "method":  "settle",
+        "tx_hash":  "",
+        "gas_burnt":  0,
+        "tokens_burnt":  "0",
+        "ok":  false,
+        "time_utc":  "2026-10-30T15:55:50Z"
+    },
+    {
+        "label":  "withdraw-alice-base",
+        "signer":  "ag2610-alice.testnet",
+        "method":  "withdraw",
+        "tx_hash":  "3g9qKKPNd11HptE2SFmxKj4ENWcfMAHMZJ6HTrUMug8Y",
+        "gas_burnt":  6956666081542,
+        "tokens_burnt":  "628711839404200000000",
+        "ok":  true,
+        "time_utc":  "2026-10-30T15:55:56Z"
+    },
+    {
+        "label":  "withdraw-alice-quote",
+        "signer":  "ag2610-alice.testnet",
+        "method":  "withdraw",
+        "tx_hash":  "13ySDfvKx6zbJidXWdmPLLjWcPSgVgTK5yzjFCvAGur3",
+        "gas_burnt":  6953865029653,
+        "tokens_burnt":  "628431734215300000000",
+        "ok":  true,
+        "time_utc":  "2026-10-30T15:56:02Z"
+    },
+    {
+        "label":  "withdraw-bob-base",
+        "signer":  "ag2610-bob.testnet",
+        "method":  "withdraw",
+        "tx_hash":  "B7zpCrpVkB1QU6Kx3JXvyHZqRiEsFANYiQcC9XbuPgUi",
+        "gas_burnt":  6954784833712,
+        "tokens_burnt":  "628523714621200000000",
+        "ok":  true,
+        "time_utc":  "2026-10-30T15:56:08Z"
+    },
+    {
+        "label":  "withdraw-bob-quote",
+        "signer":  "ag2610-bob.testnet",
+        "method":  "withdraw",
+        "tx_hash":  "9PoVpHTgvKCamNYK9fHbMrYih3QdjoH2he34SNeb32X",
+        "gas_burnt":  6947160198251,
+        "tokens_burnt":  "627761251075100000000",
+        "ok":  true,
+        "time_utc":  "2026-10-30T15:56:14Z"
+    }
+]

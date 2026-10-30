@@ -2,7 +2,7 @@
 
 PowerShell scripts that put the escrow contract and two test tokens on NEAR **testnet** and run a full trade: deposit, two partial fills, a rejected overfill, withdrawal. For the contract rules see `docs/ESCROW.md`.
 
-**Status:** the first live run created the accounts, deployed both contracts, called `new`, registered the order keys and minted test tokens (steps 1 to 4 and the minting of step 5 worked against the real testnet with near-cli-rs v0.30.1). The deposit then failed because of a bug in the contract (see "Lessons from the first live run" below); it is fixed, and step 3 replaces the old code on a re-run. Steps 5 to 7 are not yet recorded. The scripts are also tested against a local simulator of near-cli-rs and of the RPC (command forms, JSON arguments, re-runs, stale views, failing exit codes, a refunded deposit). Testnet only: every script refuses the word `mainnet`. Transactions are sent only when you start a script.
+**Status:** the complete run (steps 1 to 7) worked on the real testnet on 30 October 2026, and again on a second start with the same prefix, using near-cli-rs v0.30.1. The measured gas and the transaction links are in `docs/BENCHMARKS.md`. Two bugs found on the way are fixed (see "Lessons from the live runs" below). The scripts are also tested against a local simulator of near-cli-rs and of the RPC (command forms, JSON arguments, re-runs, stale views, failing exit codes, a refunded deposit). Testnet only: every script refuses the word `mainnet`. Transactions are sent only when you start a script.
 
 ## Quick start
 
@@ -59,7 +59,7 @@ terra-keys verify-order --signed-order-file orders\buy.json --key-file <KEY>
 
 Account creation is funded by the testnet faucet. Contract storage is bound at about 1 NEAR per 100 KB of code (about 3.5 NEAR for the escrow, 3.0 NEAR for each token), plus small storage deposits in step 5. Whether the faucet still funds this much is only known after step 1.
 
-## Lessons from the first live run
+## Lessons from the live runs
 
 - **Argument names are the JSON keys.** The NEAR SDK reads the call arguments by the Rust parameter names. A parameter written `_msg` (to silence an unused-variable warning) is read as the key `_msg`, so the token's `ft_on_transfer(sender_id, amount, msg)` call cannot be read, the contract panics and the token refunds the full amount. Unit tests that call the Rust method directly do not see this. Two tests now check the generated call arguments and the source for underscore-prefixed parameters of exported methods.
 - **Build the contracts with `RUSTFLAGS=--cfg near`.** A plain `cargo build --target wasm32-unknown-unknown` compiles, deploys and runs, but the SDK then uses guest-side fallbacks: contract errors show only `unreachable` (the second live start of step 3 stopped on exactly that: the already-initialised `new` call gave no text) and hashing costs more gas. Step 2 and the preflight now reject such a file; step 3 also treats a bare `unreachable` from `new` as "already initialised".
@@ -67,6 +67,6 @@ Account creation is funded by the testnet faucet. Contract storage is bound at a
 
 ## Remaining risks
 
-- Gas for `settle` and `withdraw` is estimated (100 Tgas attached). The measured values land in `results\summary.md`.
+- Gas is measured: `settle` burns about 4.4 Tgas and `withdraw` about 7 Tgas in total (100 Tgas is attached, which is generous). Every run writes its values to `results\summary.md` and `results\results.json`.
 - The faucet may rate limit new accounts. Step 1 then fails; wait and re-run, existing accounts are skipped. (It worked in the first live run.)
 - near-cli-rs prompt text and output labels may differ from v0.30.1. The scripts close stdin so a prompt cannot hang them, and they read transaction hashes from the `Transaction ID:` line (as printed by v0.30.1 in the first live run).
