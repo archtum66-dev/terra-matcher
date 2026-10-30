@@ -36,7 +36,7 @@ Canonical JSON (fields in exactly this order, no whitespace, strings for 128-bit
 
 | Method | Who | What |
 |---|---|---|
-| `ft_on_transfer(sender_id, amount, msg)` | token contract | credits the sender's free balance of the calling token; returns `"0"` (the amount not used, always zero) |
+| `ft_on_transfer(sender_id, amount, msg)` | token contract | credits the sender's free balance of the calling token; returns `"0"` (the amount not used, always zero). A balance never wraps or saturates: if it would exceed `u128::MAX` the call panics with `balance_overflow` and the token refunds the transfer. |
 | `register_key(public_key_hex)` | the trader (predecessor) | sets the trader's order key (32 bytes, 64 hex characters); replaces an earlier key |
 | `withdraw(token_id, amount, receiver_id?)` | the trader, 1 yoctoNEAR attached | debits first, then `ft_transfer` (30 Tgas) and a private callback (10 Tgas); if the transfer fails the callback credits the amount back and logs `withdraw_refund`. Attach at least 60 Tgas. |
 | `settle(buy, sell, fill_lots, price_ticks)` | anyone | see section 3 |

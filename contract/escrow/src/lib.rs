@@ -254,7 +254,10 @@ impl Escrow {
 
     fn credit_balance(&mut self, account: &AccountId, token: &AccountId, amount: u128) {
         let key = (account.clone(), token.clone());
-        let next = self.balance_get(account, token).saturating_add(amount);
+        let next = self
+            .balance_get(account, token)
+            .checked_add(amount)
+            .unwrap_or_else(|| env::panic_str("balance_overflow"));
         self.balances.insert(key, next);
     }
 
@@ -559,6 +562,14 @@ mod tests {
         let mut c = init_contract();
         set_predecessor(accounts(1));
         c.register_key("abcd".to_string());
+    }
+
+    #[test]
+    #[should_panic(expected = "balance_overflow")]
+    fn credit_balance_overflow_panics() {
+        let mut c = init_contract();
+        c.credit_balance(&accounts(1), &accounts(2), u128::MAX);
+        c.credit_balance(&accounts(1), &accounts(2), 1);
     }
 
     #[test]

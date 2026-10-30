@@ -11,14 +11,14 @@ Everything here is measured with commands in this repository. Nothing is estimat
 | How big is one settlement? | same command, field `settlement_pair_json_bytes_avg` | **407 bytes** of JSON per fill (buyer and seller draft together) |
 | Does the browser demo match the command line? | 3000 random messages through the WebAssembly module and through `terra match` | **byte-identical** output (4157 lines, 1157 fills, 688 rejections) |
 | How large is the browser module? | `cargo build -p terra-web --target wasm32-unknown-unknown --profile wasm --locked` | **267 KB** (the whole demo page, module included, is 383 KB) |
-| How large is the escrow contract? | `cd contract/escrow && RUSTFLAGS="--cfg near" cargo build --target wasm32-unknown-unknown --release` | **343 KB** wasm (351,368 bytes) |
+| How large is the escrow contract? | `cd contract/escrow && RUSTFLAGS="--cfg near" cargo build --target wasm32-unknown-unknown --release` | **343 KB** wasm (351,397 bytes) |
 | What does one `settle` cost on testnet? | `testnet/RUN-1-TO-7.bat`, two complete runs | **4.4 to 4.5 Tgas** burnt in total (4.36, 4.45, 4.42, 4.46); fee about **0.0004 NEAR**. One fill, the signatures of both orders are verified |
 | What does one `withdraw` cost on testnet? | same | **6.95 Tgas** burnt in total (6.947 to 6.957 in eight calls), including the token's `ft_transfer` and the callback; fee about **0.00063 NEAR** |
 | Does the whole trade work on a real network? | same | **Yes, twice.** Deposit of both tokens, two fills (3 lots at 95, 2 lots at 100), an overfill rejected with `overfill`, four withdrawals; final balances match the fills |
 
 ## Testnet run (30 October 2026)
 
-The run kit in `testnet/` created five accounts (`ag2610-escrow`, `-alice`, `-bob`, `-base`, `-quote`, all `.testnet`), deployed the escrow and two test tokens, registered both order keys, deposited, settled twice, tried an overfill and withdrew everything. It was run twice on the same accounts; the second run deposited again because the first had withdrawn all balances. near-cli-rs 0.30.1, escrow built with `--cfg near` (351,368 bytes), test token 300,274 bytes.
+The run kit in `testnet/` created five accounts (`ag2610-escrow`, `-alice`, `-bob`, `-base`, `-quote`, all `.testnet`), deployed the escrow and two test tokens, registered both order keys, deposited, settled twice, tried an overfill and withdrew everything. It was run twice on the same accounts; the second run deposited again because the first had withdrawn all balances. near-cli-rs 0.30.1, escrow built with `--cfg near` (351,368 bytes in these two runs), test token 300,274 bytes.
 
 Gas is the sum of `gas_burnt` over the transaction and all its receipts, read from the RPC. Fees are the burnt tokens of the same calls. Every row is a real testnet transaction; the links open the explorer.
 

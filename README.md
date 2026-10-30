@@ -2,7 +2,7 @@
 
 Non-custodial order matching for a NEAR Intents exchange. Limit orders are paired **off-chain** by a deterministic matcher that never holds funds. Every fill becomes a pair of **unsigned `token_diff` intents** that nets to zero for each token. The parties sign their own half; the NEAR Intents verifier settles. A NEAR testnet escrow contract is the second settlement path.
 
-**Status:** early scaffold, honestly labelled. Working and tested: matcher interface, 22 conformance vectors, reference matcher, settlement mapping, dry quote client, command-line tool, browser demo. Written and unit-tested only: escrow contract (not deployed, not audited).
+**Status:** early scaffold, honestly labelled. Working and tested: matcher interface, 22 conformance vectors, reference matcher, settlement mapping, dry quote client, command-line tool, browser demo. Escrow contract: unit-tested and run end to end on NEAR testnet (testnet only, not audited).
 
 ## Try it in 30 seconds (no install)
 
@@ -68,7 +68,7 @@ Use `python3 web/build.py` instead of `--check` to regenerate `web/index.html` a
 | Another engine can replace the reference matcher | the same vectors and `terra gen` flows; outputs are compared line by line |
 | Commands in this README work | `crates/terra-cli/tests/cli.rs` starts the real binary for `demo`, `match`, `settle`, `gen`, `bench` |
 
-`cargo test --all` runs 57 tests offline. The contract has its own 30 tests (29 unit tests and one interop test) and the test token 5 (see below).
+`cargo test --all` runs 57 tests offline. The contract has its own 31 tests (30 unit tests and one interop test) and the test token 5 (see below).
 
 ## Settlement
 
@@ -78,7 +78,7 @@ Each fill produces exactly one **pair** of unsigned `token_diff` intent drafts (
 
 The NEAR testnet escrow holds NEP-141 deposits as free balances, verifies ed25519-signed limit orders, and applies fills when anyone calls `settle`. Rules, error strings, and events are defined in `docs/ESCROW.md`. A manual testnet checklist is in `docs/TESTNET.md`. See [`testnet/README.md`](testnet/README.md) (Testnet run kit: scripts for the full run: accounts, deploy, keys, deposit, settle, withdraw).
 
-**State:** builds to wasm (about 343 KB), passes 29 unit tests and one interop test (orders made by `terra-keys` settle in the real contract code). **Not audited.** The run kit in `testnet/` does the deployment and a full trade on testnet. The first live runs found two real bugs that the unit tests could not see: the argument name of the NEP-141 receiver hook (with `_msg` instead of `msg` the call cannot be read and the token refunds every deposit) and a build without `--cfg near` (contract errors then show only `unreachable`). Both are fixed and covered by checks. A complete trade (deposit, two fills, a rejected overfill, withdrawal) then ran on testnet on 30 October 2026, twice: `settle` burns about 4.4 Tgas and `withdraw` about 7 Tgas (`docs/BENCHMARKS.md`, with transaction links).
+**State:** builds to wasm (about 343 KB), passes 30 unit tests and one interop test (orders made by `terra-keys` settle in the real contract code). **Not audited.** The run kit in `testnet/` does the deployment and a full trade on testnet. The first live runs found two real bugs that the unit tests could not see: the argument name of the NEP-141 receiver hook (with `_msg` instead of `msg` the call cannot be read and the token refunds every deposit) and a build without `--cfg near` (contract errors then show only `unreachable`). Both are fixed and covered by checks. A complete trade (deposit, two fills, a rejected overfill, withdrawal) then ran on testnet on 30 October 2026, twice: `settle` burns about 4.4 Tgas and `withdraw` about 7 Tgas (`docs/BENCHMARKS.md`, with transaction links).
 
 1. `cargo test --all` (repository root) runs the matcher, settlement and `escrow-types` tests. `cargo test -p escrow-types --features hash` adds the order-hash test.
 2. `cd contract/escrow && cargo test` runs the contract unit tests (the contract has its own Cargo workspace).

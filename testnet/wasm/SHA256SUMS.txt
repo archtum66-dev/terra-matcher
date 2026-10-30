@@ -1,2 +1,2 @@
-af34187dad1b65db178f3edebdd00269aa2a7cf8982c651769a89182fe4808e6  escrow.wasm
+afd545d9ba3edb549510d4b106c90eae01659caf962f29782f02de9c2cfd5fe1  escrow.wasm
 4dae423315e608e03df49344d5c7b2270e40c14a2b5c20aec7c65f08fdf96eca  terra_test_token.wasm
