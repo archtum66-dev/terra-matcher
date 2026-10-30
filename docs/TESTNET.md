@@ -1,8 +1,8 @@
 # Escrow on NEAR testnet (manual checklist)
 
-For scripted steps 1–5 (accounts, WASM, deploy, keys, deposit), see [`testnet/README.md`](../testnet/README.md).
+The scripted version of this guide (all seven steps, with preflight and dry run) is in [`testnet/README.md`](../testnet/README.md).
 
-This document is a **do X, see Y** guide for deploying and exercising the escrow contract with [near-cli-rs](https://github.com/near/near-cli-rs). **Untested on a live network** — steps are written from the contract spec, not from a recorded testnet run.
+This document is a **do X, see Y** guide for deploying and exercising the escrow contract with [near-cli-rs](https://github.com/near/near-cli-rs). **Not yet run on a live network.** The commands were exercised against a local simulator of near-cli-rs and the RPC, and the orders made by `terra-keys` are accepted by the contract code in a test (`contract/escrow/tests/cli_interop.rs`). No recorded testnet run exists yet.
 
 Replace placeholders: `<ESCROW_ACCOUNT>`, `<ALICE>`, `<BOB>`, `<BASE_TOKEN>`, `<QUOTE_TOKEN>`.
 

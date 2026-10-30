@@ -94,7 +94,7 @@ function Ensure-Storage {
         return
     }
     if ($null -eq $bal) {
-        Invoke-Near -NearArgs @(
+        $null = Invoke-Near -NearArgs @(
             'contract', 'call-function', 'as-transaction', $Token, 'storage_deposit', 'json-args', "{`"account_id`":`"$Account`",`"registration_only`":true}",
             'prepaid-gas', '30 Tgas', 'attached-deposit', '0.01 NEAR', 'sign-as', $Account,
             'network-config', 'testnet', 'sign-with-keychain', 'send'
@@ -109,25 +109,25 @@ if (-not $skipMintDeposit) {
         }
     }
 
-    Invoke-Near -NearArgs @(
+    $null = Invoke-Near -NearArgs @(
         'contract', 'call-function', 'as-transaction', $quote, 'mint', 'json-args', "{`"account_id`":`"$alice`",`"amount`":`"$QuoteAmount`"}",
         'prepaid-gas', '30 Tgas', 'attached-deposit', '0 NEAR', 'sign-as', $quote,
         'network-config', 'testnet', 'sign-with-keychain', 'send'
     ) -DryRun:$DryRun
 
-    Invoke-Near -NearArgs @(
+    $null = Invoke-Near -NearArgs @(
         'contract', 'call-function', 'as-transaction', $base, 'mint', 'json-args', "{`"account_id`":`"$bob`",`"amount`":`"$BaseAmount`"}",
         'prepaid-gas', '30 Tgas', 'attached-deposit', '0 NEAR', 'sign-as', $base,
         'network-config', 'testnet', 'sign-with-keychain', 'send'
     ) -DryRun:$DryRun
 
-    Invoke-Near -NearArgs @(
+    $null = Invoke-Near -NearArgs @(
         'contract', 'call-function', 'as-transaction', $quote, 'ft_transfer_call', 'json-args', "{`"receiver_id`":`"$escrow`",`"amount`":`"$QuoteAmount`",`"msg`":`"`"}",
         'prepaid-gas', '100 Tgas', 'attached-deposit', '1 yoctoNEAR', 'sign-as', $alice,
         'network-config', 'testnet', 'sign-with-keychain', 'send'
     ) -DryRun:$DryRun
 
-    Invoke-Near -NearArgs @(
+    $null = Invoke-Near -NearArgs @(
         'contract', 'call-function', 'as-transaction', $base, 'ft_transfer_call', 'json-args', "{`"receiver_id`":`"$escrow`",`"amount`":`"$BaseAmount`",`"msg`":`"`"}",
         'prepaid-gas', '100 Tgas', 'attached-deposit', '1 yoctoNEAR', 'sign-as', $bob,
         'network-config', 'testnet', 'sign-with-keychain', 'send'
@@ -135,6 +135,11 @@ if (-not $skipMintDeposit) {
 }
 
 if (-not $DryRun) {
+    $wantQuote = [System.Numerics.BigInteger]::Parse($QuoteAmount)
+    $wantBase = [System.Numerics.BigInteger]::Parse($BaseAmount)
+    # waits until the final block shows the deposit; throws with the last value on a timeout
+    [void](Wait-ViewValue -Contract $escrow -Method 'balance_of' -ArgsObject @{ account_id = $alice; token_id = $quote } -Test { param($v) $null -ne $v -and [System.Numerics.BigInteger]::Parse([string]$v) -ge $wantQuote })
+    [void](Wait-ViewValue -Contract $escrow -Method 'balance_of' -ArgsObject @{ account_id = $bob; token_id = $base } -Test { param($v) $null -ne $v -and [System.Numerics.BigInteger]::Parse([string]$v) -ge $wantBase })
     $aliceQuoteBal = Get-EscrowBalance -Account $alice -Token $quote
     $bobBaseBal = Get-EscrowBalance -Account $bob -Token $base
     Write-Host ''

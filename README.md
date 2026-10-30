@@ -68,7 +68,7 @@ Use `python3 web/build.py` instead of `--check` to regenerate `web/index.html` a
 | Another engine can replace the reference matcher | the same vectors and `terra gen` flows; outputs are compared line by line |
 | Commands in this README work | `crates/terra-cli/tests/cli.rs` starts the real binary for `demo`, `match`, `settle`, `gen`, `bench` |
 
-`cargo test --all` runs 43 tests offline. The contract has its own 26 tests (see below).
+`cargo test --all` runs 57 tests offline. The contract has its own 27 tests and the test token 5 (see below).
 
 ## Settlement
 
@@ -78,7 +78,7 @@ Each fill produces exactly one **pair** of unsigned `token_diff` intent drafts (
 
 The NEAR testnet escrow holds NEP-141 deposits as free balances, verifies ed25519-signed limit orders, and applies fills when anyone calls `settle`. Rules, error strings, and events are defined in `docs/ESCROW.md`. A manual testnet checklist is in `docs/TESTNET.md`. See [`testnet/README.md`](testnet/README.md) (Testnet run kit: scripts for the full run: accounts, deploy, keys, deposit, settle, withdraw).
 
-**State:** builds to wasm (about 360 KB) and passes 26 unit tests. **Not deployed, not tested on a live network, not audited.**
+**State:** builds to wasm (about 360 KB), passes 26 unit tests and one interop test (orders made by `terra-keys` settle in the real contract code). **Not run on a live network, not audited.** The run kit in `testnet/` does the deployment and a full trade on testnet; it has only been exercised against a local simulator.
 
 1. `cargo test --all` (repository root) runs the matcher, settlement and `escrow-types` tests. `cargo test -p escrow-types --features hash` adds the order-hash test.
 2. `cd contract/escrow && cargo test` runs the contract unit tests (the contract has its own Cargo workspace).
@@ -93,6 +93,7 @@ The NEAR testnet escrow holds NEP-141 deposits as free balances, verifies ed2551
 | `matcher-stub` | Public reference matcher (`StubMatcher`) |
 | `settlement` | Fill → `token_diff` pair, wallet message helpers, dry quote client |
 | `terra-cli` | `terra` binary: `match`, `settle`, `demo`, `gen`, `bench`; optional `quote` with `--features http` |
+| `terra-keys` | Order key generation and signing for the testnet run kit: `keygen`, `pubkey`, `make-order`, `settle-args`, `verify-order` |
 | `web-demo` (`terra-web`) | The reference matcher and settlement drafts as a WebAssembly module for `web/index.html` |
 
 ## Folders
@@ -101,6 +102,8 @@ The NEAR testnet escrow holds NEP-141 deposits as free balances, verifies ed2551
 |---|---|
 | `crates/` | Rust crates (table above) |
 | `contract/escrow/` | NEAR testnet escrow contract (own Cargo workspace) |
+| `contract/test-token/` | Mintable NEP-141 test token without value (own Cargo workspace) |
+| `testnet/` | PowerShell run kit for testnet: accounts, deploy, keys, deposit, settle, withdraw |
 | `web/` | Browser demo: `index.html` (built), `index.template.html`, `build.py` |
 | `tests/vectors/` | Public conformance vectors (JSON) |
 | `docs/` | `SPEC.md`, `BENCHMARKS.md`, `ESCROW.md`, `TESTNET.md`, `INTENTS_FACTS.md` |
@@ -109,12 +112,12 @@ The NEAR testnet escrow holds NEP-141 deposits as free balances, verifies ed2551
 ## Not here yet
 
 - A hosted copy of the demo (the page works from a local file)
-- Escrow deployed and exercised on a live testnet
+- Escrow deployed and exercised on a live testnet (the run kit in `testnet/` is ready; no live run yet)
 - Live verifier or 1Click integration in default builds (use `settlement` / `terra-cli` `http` feature only when you intentionally call the public quote API with `ONECLICK_API_KEY`)
 
 ## Limits
 
-Quote and settlement fixtures are hand-written from public documentation, not recorded from a live system. Wallet message JSON shapes are marked `UNVERIFIED` in code until checked against `intents.near`. The escrow contract has unit tests only; gas values for `withdraw` are estimates. The browser demo and the benchmarks use the reference matcher and do not talk to NEAR. On-chain gas and fees are not measured (see `docs/BENCHMARKS.md`).
+Quote and settlement fixtures are hand-written from public documentation, not recorded from a live system. Wallet message JSON shapes are marked `UNVERIFIED` in code until checked against `intents.near`. The escrow contract has unit tests and one interop test only; gas values for `settle` and `withdraw` are estimates. The browser demo and the benchmarks use the reference matcher and do not talk to NEAR. On-chain gas and fees are not measured (see `docs/BENCHMARKS.md`).
 
 ## AI assistance
 

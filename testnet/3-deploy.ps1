@@ -76,11 +76,11 @@ function Deploy-Contract {
         Write-Host "contract already deployed, skipping: $Account"
         return
     }
-    Invoke-Near -NearArgs @(
+    $null = Invoke-Near -NearArgs @(
         'contract', 'deploy', $Account, 'use-file', $WasmPath, 'without-init-call',
         'network-config', 'testnet', 'sign-with-keychain', 'send'
     ) -DryRun:$DryRun
-    Invoke-Near -NearArgs @(
+    $null = Invoke-Near -NearArgs @(
         'contract', 'call-function', 'as-transaction', $Account, 'new', 'json-args', $InitJson,
         'prepaid-gas', '30 Tgas', 'attached-deposit', '0 NEAR', 'sign-as', $Account,
         'network-config', 'testnet', 'sign-with-keychain', 'send'
@@ -92,14 +92,9 @@ Deploy-Contract -Account $base -WasmPath $tokenWasm -InitJson '{"symbol":"TBASE"
 Deploy-Contract -Account $quote -WasmPath $tokenWasm -InitJson '{"symbol":"TQUOTE"}'
 
 if (-not $DryRun) {
-    $baseMeta = Invoke-View -Contract $base -Method 'ft_metadata' -ArgsObject @{} -DryRun:$false
-    if ($null -eq $baseMeta -or $baseMeta.symbol -ne 'TBASE') {
-        throw 'base token ft_metadata symbol check failed'
-    }
-    $quoteMeta = Invoke-View -Contract $quote -Method 'ft_metadata' -ArgsObject @{} -DryRun:$false
-    if ($null -eq $quoteMeta -or $quoteMeta.symbol -ne 'TQUOTE') {
-        throw 'quote token ft_metadata symbol check failed'
-    }
+    # the final block can trail the transaction by a few seconds, so the checks wait for the expected value
+    [void](Wait-ViewValue -Contract $base -Method 'ft_metadata' -ArgsObject @{} -Test { param($v) $null -ne $v -and $v.symbol -eq 'TBASE' })
+    [void](Wait-ViewValue -Contract $quote -Method 'ft_metadata' -ArgsObject @{} -Test { param($v) $null -ne $v -and $v.symbol -eq 'TQUOTE' })
     # the escrow must answer a view call (the value depends on whether step 4 already ran)
     [void](Invoke-View -Contract $escrow -Method 'get_key' -ArgsObject @{ account_id = $state.alice_account } -DryRun:$false)
 }

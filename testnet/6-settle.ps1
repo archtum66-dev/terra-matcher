@@ -77,8 +77,12 @@ function Test-StateField {
 
 $required = @(
     'escrow_account', 'alice_account', 'bob_account',
-    'base_token', 'quote_token', 'alice_public_hex', 'bob_public_hex'
+    'base_token', 'quote_token'
 )
+if (-not $DryRun) {
+    # a dry run may run before step 4 has stored the public keys
+    $required += @('alice_public_hex', 'bob_public_hex')
+}
 foreach ($f in $required) {
     if (-not (Test-StateField -Obj $state -Name $f)) {
         throw "state.json missing field: $f (run steps 1-5 and 4-register-keys)"
@@ -100,7 +104,7 @@ if (-not $KeysDir) {
 
 $aliceKey = Join-Path $KeysDir 'alice.order-key'
 $bobKey = Join-Path $KeysDir 'bob.order-key'
-if (-not (Test-Path -LiteralPath $aliceKey) -or -not (Test-Path -LiteralPath $bobKey)) {
+if (-not $DryRun -and (-not (Test-Path -LiteralPath $aliceKey) -or -not (Test-Path -LiteralPath $bobKey))) {
     throw "missing alice.order-key or bob.order-key under $KeysDir ; run 4-register-keys.ps1"
 }
 
@@ -149,6 +153,12 @@ function Get-FillAmounts {
     }
 }
 
+if ((Test-StateField -Obj $state -Name 'settle_done') -and ($state.settle_done -eq $true) -and (-not $Force)) {
+    Write-Host 'settle already done (use -Force to redo)'
+    Write-Host 'NEXT: .\7-withdraw.ps1'
+    exit 0
+}
+
 if (-not $DryRun) {
     $aliceKeyOnChain = Invoke-View -Contract $escrow -Method 'get_key' -ArgsObject @{ account_id = $alice }
     $bobKeyOnChain = Invoke-View -Contract $escrow -Method 'get_key' -ArgsObject @{ account_id = $bob }
@@ -185,12 +195,6 @@ escrow balances too low for both fills (run 5-deposit.ps1).
     }
 }
 
-if ((Test-StateField -Obj $state -Name 'settle_done') -and ($state.settle_done -eq $true) -and (-not $Force)) {
-    Write-Host 'settle already done (use -Force to redo)'
-    Write-Host 'NEXT: .\7-withdraw.ps1'
-    exit 0
-}
-
 $ordersDir = Join-Path $PSScriptRoot 'orders'
 if (-not (Test-Path -LiteralPath $ordersDir)) {
     if (-not $DryRun) {
@@ -198,8 +202,7 @@ if (-not (Test-Path -LiteralPath $ordersDir)) {
     }
 }
 
-$epoch = Get-Date '1970-01-01 00:00:00Z'
-$nonceNow = [int64](((Get-Date).ToUniversalTime() - $epoch).TotalSeconds)
+$nonceNow = [int64][DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
 
 $buyPath = Join-Path $ordersDir 'buy.json'
 $sellPath = Join-Path $ordersDir 'sell.json'
@@ -293,16 +296,11 @@ function Invoke-SettleFill {
             order_hash = $BuyHashHex
         } -Test { param($v) $null -ne $v -and $v.filled_lots -eq $ExpectedFilledTotal } -DryRun:$false
 
-        $aliceBaseNow = Get-EscrowBalanceStr -Account $alice -Token $base
-        $bobQuoteNow = Get-EscrowBalanceStr -Account $bob -Token $quote
         $expectedAliceBase = [System.Numerics.BigInteger]::Parse($script:aliceBaseStart) + $script:cumAliceBaseGain
         $expectedBobQuote = [System.Numerics.BigInteger]::Parse($script:bobQuoteStart) + $script:cumBobQuoteGain
-        if ([System.Numerics.BigInteger]::Parse($aliceBaseNow) -ne $expectedAliceBase) {
-            throw "alice base balance mismatch after $Label"
-        }
-        if ([System.Numerics.BigInteger]::Parse($bobQuoteNow) -ne $expectedBobQuote) {
-            throw "bob quote balance mismatch after $Label"
-        }
+        # waits until the final block shows the new balances; throws with the last value on a timeout
+        $null = Wait-ViewValue -Contract $escrow -Method 'balance_of' -ArgsObject @{ account_id = $alice; token_id = $base } -Test { param($v) $null -ne $v -and [System.Numerics.BigInteger]::Parse([string]$v) -eq $expectedAliceBase }
+        $null = Wait-ViewValue -Contract $escrow -Method 'balance_of' -ArgsObject @{ account_id = $bob; token_id = $quote } -Test { param($v) $null -ne $v -and [System.Numerics.BigInteger]::Parse([string]$v) -eq $expectedBobQuote }
         if ($null -eq $filled) {
             throw "order_state check failed for $Label"
         }
@@ -336,13 +334,21 @@ if (-not $SkipNegativeCheck) {
         '--price-ticks', $Fill1PriceTicks.ToString()
     ) -Raw -DryRun:$DryRun
 
-    $null = Invoke-NearTx -NearArgs @(
+    $over = Invoke-NearTx -NearArgs @(
         'contract', 'call-function', 'as-transaction', $escrow, 'settle', 'json-args', $argsOver,
         'prepaid-gas', '100 Tgas', 'attached-deposit', '0 NEAR', 'sign-as', $Submitter,
         'network-config', 'testnet', 'sign-with-keychain', 'send'
     ) -Signer $Submitter -Label 'settle-overfill-rejected' -DryRun:$DryRun -AllowFailure
 
     if (-not $DryRun) {
+        if ($over.Ok) {
+            throw 'overfill test: the contract accepted a fill beyond the order quantity'
+        }
+        if ($over.Output -match 'overfill') {
+            Write-Host 'overfill test: the contract rejected the extra fill with "overfill" (expected)'
+        } else {
+            Write-Host 'overfill test: the transaction was rejected, but the reason text was not recognised; see the log'
+        }
         $st = Invoke-View -Contract $escrow -Method 'order_state' -ArgsObject @{
             account_id = $alice
             order_hash = $buyHash
@@ -373,9 +379,9 @@ if (-not $DryRun) {
 
 Write-Host ''
 Write-Host 'Settle results:'
-Write-Host ('{0,-22}{1,6}{2,7}{3,14}{4,14}{5,8}{6}' -f 'Fill', 'Lots', 'Price', 'Base', 'Quote', 'Tgas', 'TxHash')
+Write-Host ('{0,-22}{1,6}{2,7}{3,14}{4,14}{5,8}  {6}' -f 'Fill', 'Lots', 'Price', 'Base', 'Quote', 'Tgas', 'TxHash')
 foreach ($row in $resultRows) {
-    Write-Host ('{0,-22}{1,6}{2,7}{3,14}{4,14}{5,8}{6}' -f $row.Fill, $row.Lots, $row.Price, $row.Base, $row.Quote, $row.GasTgas, $row.TxHash)
+    Write-Host ('{0,-22}{1,6}{2,7}{3,14}{4,14}{5,8}  {6}' -f $row.Fill, $row.Lots, $row.Price, $row.Base, $row.Quote, $row.GasTgas, $row.TxHash)
 }
 
 Write-Host 'NEXT: .\7-withdraw.ps1'

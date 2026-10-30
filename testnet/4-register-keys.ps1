@@ -119,16 +119,14 @@ foreach ($t in $traders) {
         $icacls = Join-Path $env:SystemRoot 'System32\icacls.exe'
         & $icacls $keyPath '/inheritance:r' '/grant:r' ($user + ':(R,W)') | Out-Null
     }
-    Invoke-Near -NearArgs @(
+    $null = Invoke-Near -NearArgs @(
         'contract', 'call-function', 'as-transaction', $state.escrow_account, 'register_key', 'json-args', "{`"public_key_hex`":`"$hex`"}",
         'prepaid-gas', '30 Tgas', 'attached-deposit', '0 NEAR', 'sign-as', $t.Account,
         'network-config', 'testnet', 'sign-with-keychain', 'send'
     ) -DryRun:$DryRun
     if (-not $DryRun) {
-        $onChain = Invoke-View -Contract $state.escrow_account -Method 'get_key' -ArgsObject @{ account_id = $t.Account }
-        if ($onChain -ne $hex) {
-            throw "get_key mismatch for $($t.Account)"
-        }
+        # waits until the final block shows the key; throws with the last value on a timeout
+        [void](Wait-ViewValue -Contract $state.escrow_account -Method 'get_key' -ArgsObject @{ account_id = $t.Account } -Test { param($v) $v -eq $hex })
     }
     $state | Add-Member -NotePropertyName $t.Field -NotePropertyValue $hex -Force
     Write-Host "$($t.Account) public_key_hex=$hex"

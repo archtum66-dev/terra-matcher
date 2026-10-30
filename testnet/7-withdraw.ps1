@@ -45,7 +45,8 @@ function Get-EscrowBalanceStr {
         token_id   = $Token
     } -DryRun:$DryRun
     if ($DryRun) {
-        return '0'
+        # a dry run shows the planned commands with a placeholder amount
+        return '1'
     }
     if ($null -eq $v) {
         return '0'
@@ -134,7 +135,7 @@ if (-not $anyLeft) {
 $records = Get-ResultRecords
 Write-Host ''
 Write-Host 'Transaction results:'
-Write-Host ('{0,-28}{1,10}{2}' -f 'Label', 'Tgas', 'TxHash')
+Write-Host ('{0,-28}{1,8}  {2}' -f 'Label', 'Tgas', 'TxHash')
 foreach ($rec in $records) {
     $gasTgas = 0.0
     if ($rec.gas_burnt -gt 0) {
@@ -144,7 +145,12 @@ foreach ($rec in $records) {
     if (-not $hash) {
         $hash = ''
     }
-    Write-Host ('{0,-28}{1,10}{2}' -f $rec.label, $gasTgas, $hash)
+    Write-Host ('{0,-28}{1,8}  {2}' -f $rec.label, $gasTgas, $hash)
+}
+
+if ($DryRun) {
+    Write-Host 'dry run: results\summary.md is not written'
+    exit 0
 }
 
 $resultsDir = Join-Path $PSScriptRoot 'results'

@@ -139,10 +139,13 @@ function Invoke-Native {
     $psi.UseShellExecute = $false
     $psi.RedirectStandardOutput = $true
     $psi.RedirectStandardError = $true
+    $psi.RedirectStandardInput = $true
     $psi.CreateNoWindow = $true
     $proc = New-Object System.Diagnostics.Process
     $proc.StartInfo = $psi
     [void]$proc.Start()
+    # no input is ever sent: an unexpected prompt of the tool fails fast instead of waiting for a keyboard
+    $proc.StandardInput.Close()
     # read both streams asynchronously so a full pipe cannot block the child
     $outTask = $proc.StandardOutput.ReadToEndAsync()
     $errTask = $proc.StandardError.ReadToEndAsync()
@@ -157,6 +160,10 @@ function Invoke-Native {
 function Get-NearExecutable {
     if ($env:TERRA_NEAR_BIN) {
         return $env:TERRA_NEAR_BIN
+    }
+    $local = Join-Path $PSScriptRoot 'bin\near.exe'
+    if (Test-Path -LiteralPath $local) {
+        return $local
     }
     $cmd = Get-Command near -ErrorAction SilentlyContinue
     if ($null -eq $cmd) {
@@ -193,7 +200,8 @@ function Invoke-Near {
     param(
         [Parameter(Mandatory = $true)]
         [string[]]$NearArgs,
-        [switch]$DryRun
+        [switch]$DryRun,
+        [switch]$AllowFailure
     )
     Assert-NoMainnetInArgs -ArgList $NearArgs
     $displayArgs = Redact-ArgumentList -ArgList $NearArgs
@@ -217,10 +225,70 @@ function Invoke-Near {
         Write-Host $safeErr
         Write-LogLine $safeErr
     }
+    if ($AllowFailure) {
+        return $result
+    }
     if ($result.ExitCode -ne 0) {
         throw "near exited with code $($result.ExitCode)"
     }
+    if (Test-NearOutputFailed -Text ($result.StdOut + "`n" + $result.StdErr)) {
+        throw 'the transaction was rejected on chain (see the output above)'
+    }
     return $result
+}
+
+function Remove-AnsiCodes {
+    # near-cli-rs may colour its output; strip the escape sequences before parsing
+    param([string]$Text)
+    if (-not $Text) {
+        return ''
+    }
+    return ([regex]::Replace($Text, "\x1b\[[0-9;]*[A-Za-z]", ''))
+}
+
+function Test-NearOutputFailed {
+    # True when the output of a near call shows an on-chain failure (a contract panic or an execution error).
+    # near-cli-rs may exit with 0 even then, so the text is checked as well as the exit code.
+    param([string]$Text)
+    $clean = Remove-AnsiCodes -Text $Text
+    return ($clean -match 'Smart contract panicked|ExecutionError|FunctionCallError|ActionError|Failure:')
+}
+
+function Wait-ViewValue {
+    # Calls a view method until the test returns $true (the final block can trail the transaction by a few seconds).
+    # Returns the last value; throws after TimeoutSec with that value in the message.
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Contract,
+        [Parameter(Mandatory = $true)]
+        [string]$Method,
+        $ArgsObject,
+        [Parameter(Mandatory = $true)]
+        [scriptblock]$Test,
+        [int]$TimeoutSec = 60,
+        [switch]$DryRun
+    )
+    if ($DryRun) {
+        return $null
+    }
+    $deadline = (Get-Date).AddSeconds($TimeoutSec)
+    while ($true) {
+        $last = Invoke-View -Contract $Contract -Method $Method -ArgsObject $ArgsObject
+        $passed = $false
+        try {
+            $passed = [bool](& $Test $last)
+        } catch {
+            $passed = $false
+        }
+        if ($passed) {
+            return $last
+        }
+        if ((Get-Date) -gt $deadline) {
+            $shown = ($last | ConvertTo-Json -Compress -Depth 5)
+            throw "timeout waiting for $Contract.$Method; last value: $shown"
+        }
+        Start-Sleep -Seconds 3
+    }
 }
 
 function Invoke-RpcRaw {

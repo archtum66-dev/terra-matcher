@@ -70,9 +70,14 @@ fn non_empty_id(name: &str, s: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn expiry_ns_from_flags(expiry_ns: Option<u64>, expires_in_secs: Option<u64>) -> Result<u64, String> {
+fn expiry_ns_from_flags(
+    expiry_ns: Option<u64>,
+    expires_in_secs: Option<u64>,
+) -> Result<u64, String> {
     match (expiry_ns, expires_in_secs) {
-        (Some(_), Some(_)) => Err("use exactly one of --expiry-ns or --expires-in-secs".to_string()),
+        (Some(_), Some(_)) => {
+            Err("use exactly one of --expiry-ns or --expires-in-secs".to_string())
+        }
         (None, None) => Err("missing expiry: use --expiry-ns or --expires-in-secs".to_string()),
         (Some(v), None) => Ok(v),
         (None, Some(secs)) => {
@@ -105,21 +110,39 @@ fn sign_order(seed: &[u8; 32], order: &Order) -> Result<(String, String, SignedO
     Ok((hash_hex, public_key_hex, signed_order))
 }
 
-pub fn cmd_make_order(
-    key_file: &Path,
-    contract_id: &str,
-    account_id: &str,
-    base_token: &str,
-    quote_token: &str,
-    lot_size_base: &str,
-    quote_per_tick_lot: &str,
-    side: &str,
-    price_ticks: &str,
-    qty_lots: &str,
-    nonce: &str,
-    expiry_ns: Option<&str>,
-    expires_in_secs: Option<&str>,
-) -> Result<(), String> {
+/// Raw command-line values of `make-order` (validated in `cmd_make_order`).
+pub struct MakeOrderArgs<'a> {
+    pub key_file: &'a Path,
+    pub contract_id: &'a str,
+    pub account_id: &'a str,
+    pub base_token: &'a str,
+    pub quote_token: &'a str,
+    pub lot_size_base: &'a str,
+    pub quote_per_tick_lot: &'a str,
+    pub side: &'a str,
+    pub price_ticks: &'a str,
+    pub qty_lots: &'a str,
+    pub nonce: &'a str,
+    pub expiry_ns: Option<&'a str>,
+    pub expires_in_secs: Option<&'a str>,
+}
+
+pub fn cmd_make_order(args: &MakeOrderArgs<'_>) -> Result<(), String> {
+    let MakeOrderArgs {
+        key_file,
+        contract_id,
+        account_id,
+        base_token,
+        quote_token,
+        lot_size_base,
+        quote_per_tick_lot,
+        side,
+        price_ticks,
+        qty_lots,
+        nonce,
+        expiry_ns,
+        expires_in_secs,
+    } = *args;
     non_empty_id("contract_id", contract_id)?;
     non_empty_id("account_id", account_id)?;
     non_empty_id("base_token", base_token)?;
@@ -259,8 +282,8 @@ fn verifying_key_from_hex(hex_str: &str) -> Result<VerifyingKey, String> {
 
 pub fn verify_signed_order(signed: &SignedOrder, vk: &VerifyingKey) -> Result<[u8; 32], String> {
     let hash = order_hash(&signed.order)?;
-    let sig_bytes = hex::decode(&signed.signature)
-        .map_err(|e| format!("invalid signature hex: {e}"))?;
+    let sig_bytes =
+        hex::decode(&signed.signature).map_err(|e| format!("invalid signature hex: {e}"))?;
     let sig_arr: [u8; 64] = sig_bytes
         .try_into()
         .map_err(|_| "signature must be 64 bytes".to_string())?;

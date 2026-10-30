@@ -136,10 +136,14 @@ fn run_make_order(mut flags: FlagMap) -> Result<(), String> {
         .take("--key-file")?
         .map(PathBuf::from)
         .ok_or("missing --key-file")?;
-    let contract_id = flags.take("--contract-id")?.ok_or("missing --contract-id")?;
+    let contract_id = flags
+        .take("--contract-id")?
+        .ok_or("missing --contract-id")?;
     let account_id = flags.take("--account-id")?.ok_or("missing --account-id")?;
     let base_token = flags.take("--base-token")?.ok_or("missing --base-token")?;
-    let quote_token = flags.take("--quote-token")?.ok_or("missing --quote-token")?;
+    let quote_token = flags
+        .take("--quote-token")?
+        .ok_or("missing --quote-token")?;
     let lot_size_base = flags
         .take("--lot-size-base")?
         .ok_or("missing --lot-size-base")?;
@@ -147,7 +151,9 @@ fn run_make_order(mut flags: FlagMap) -> Result<(), String> {
         .take("--quote-per-tick-lot")?
         .ok_or("missing --quote-per-tick-lot")?;
     let side = flags.take("--side")?.ok_or("missing --side")?;
-    let price_ticks = flags.take("--price-ticks")?.ok_or("missing --price-ticks")?;
+    let price_ticks = flags
+        .take("--price-ticks")?
+        .ok_or("missing --price-ticks")?;
     let qty_lots = flags.take("--qty-lots")?.ok_or("missing --qty-lots")?;
     let nonce = flags.take("--nonce")?.ok_or("missing --nonce")?;
     let expiry_ns = flags.take("--expiry-ns")?;
@@ -155,21 +161,21 @@ fn run_make_order(mut flags: FlagMap) -> Result<(), String> {
     if !flags.rest().is_empty() {
         return Err(format!("unexpected argument: {}", flags.rest()[0]));
     }
-    order::cmd_make_order(
-        &key_file,
-        &contract_id,
-        &account_id,
-        &base_token,
-        &quote_token,
-        &lot_size_base,
-        &quote_per_tick_lot,
-        &side,
-        &price_ticks,
-        &qty_lots,
-        &nonce,
-        expiry_ns.as_deref(),
-        expires_in_secs.as_deref(),
-    )
+    order::cmd_make_order(&order::MakeOrderArgs {
+        key_file: &key_file,
+        contract_id: &contract_id,
+        account_id: &account_id,
+        base_token: &base_token,
+        quote_token: &quote_token,
+        lot_size_base: &lot_size_base,
+        quote_per_tick_lot: &quote_per_tick_lot,
+        side: &side,
+        price_ticks: &price_ticks,
+        qty_lots: &qty_lots,
+        nonce: &nonce,
+        expiry_ns: expiry_ns.as_deref(),
+        expires_in_secs: expires_in_secs.as_deref(),
+    })
 }
 
 fn run_settle_args(mut flags: FlagMap) -> Result<(), String> {
@@ -182,7 +188,9 @@ fn run_settle_args(mut flags: FlagMap) -> Result<(), String> {
         .map(PathBuf::from)
         .ok_or("missing --sell-file")?;
     let fill_lots = flags.take("--fill-lots")?.ok_or("missing --fill-lots")?;
-    let price_ticks = flags.take("--price-ticks")?.ok_or("missing --price-ticks")?;
+    let price_ticks = flags
+        .take("--price-ticks")?
+        .ok_or("missing --price-ticks")?;
     if !flags.rest().is_empty() {
         return Err(format!("unexpected argument: {}", flags.rest()[0]));
     }

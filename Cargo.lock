@@ -563,8 +563,10 @@ name = "terra-keys"
 version = "0.1.0"
 dependencies = [
  "ed25519-dalek",
+ "escrow-types",
  "hex",
  "rand_core",
+ "serde",
  "serde_json",
 ]
 

@@ -1,8 +1,11 @@
 //! Integration tests for the `terra-keys` binary.
 use ed25519_dalek::{SigningKey, Verifier, VerifyingKey};
-use escrow_types::{order_hash, order_hash_hex, Order, Side, SignedOrder};
+use escrow_types::{order_hash, order_hash_hex, Order, SignedOrder};
 use std::process::Command;
-use std::{fs, path::PathBuf};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 fn bin() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_terra-keys"))
@@ -19,7 +22,7 @@ fn cleanup(dir: &PathBuf) {
     let _ = fs::remove_dir_all(dir);
 }
 
-fn write_seed(dir: &PathBuf, name: &str) -> PathBuf {
+fn write_seed(dir: &Path, name: &str) -> PathBuf {
     let path = dir.join(name);
     fs::write(&path, format!("{}\n", "07".repeat(32))).expect("write seed");
     path
@@ -169,11 +172,12 @@ fn keygen_rejects_invalid_name() {
 fn make_order_hash_and_signature() {
     let dir = temp_dir("make_order_hash_and_signature");
     let key_path = write_seed(&dir, "k.order-key");
-    let args: Vec<&str> = sample_make_order_args(key_path.to_str().unwrap())
-        .iter()
-        .map(String::as_str)
-        .collect();
-    let out = Command::new(bin()).args(args).output().expect("run make-order");
+    let owned = sample_make_order_args(key_path.to_str().unwrap());
+    let args: Vec<&str> = owned.iter().map(String::as_str).collect();
+    let out = Command::new(bin())
+        .args(args)
+        .output()
+        .expect("run make-order");
     assert!(
         out.status.success(),
         "stderr: {}",
@@ -181,8 +185,7 @@ fn make_order_hash_and_signature() {
     );
     let line: serde_json::Value =
         serde_json::from_str(String::from_utf8_lossy(&out.stdout).trim()).unwrap();
-    let order: Order =
-        serde_json::from_value(line["signed_order"]["order"].clone()).unwrap();
+    let order: Order = serde_json::from_value(line["signed_order"]["order"].clone()).unwrap();
     let expected_hash = order_hash_hex(&order).unwrap();
     assert_eq!(line["order_hash"].as_str().unwrap(), expected_hash);
     let hash = order_hash(&order).unwrap();
@@ -204,15 +207,15 @@ fn make_order_hash_and_signature() {
 fn make_order_deterministic_signature() {
     let dir = temp_dir("make_order_deterministic_signature");
     let key_path = write_seed(&dir, "k.order-key");
-    let args: Vec<&str> = sample_make_order_args(key_path.to_str().unwrap())
-        .iter()
-        .map(String::as_str)
-        .collect();
+    let owned = sample_make_order_args(key_path.to_str().unwrap());
+    let args: Vec<&str> = owned.iter().map(String::as_str).collect();
     let out1 = Command::new(bin()).args(&args).output().unwrap();
     let out2 = Command::new(bin()).args(&args).output().unwrap();
     assert!(out1.status.success() && out2.status.success());
-    let j1: serde_json::Value = serde_json::from_str(String::from_utf8_lossy(&out1.stdout).trim()).unwrap();
-    let j2: serde_json::Value = serde_json::from_str(String::from_utf8_lossy(&out2.stdout).trim()).unwrap();
+    let j1: serde_json::Value =
+        serde_json::from_str(String::from_utf8_lossy(&out1.stdout).trim()).unwrap();
+    let j2: serde_json::Value =
+        serde_json::from_str(String::from_utf8_lossy(&out2.stdout).trim()).unwrap();
     assert_eq!(
         j1["signed_order"]["signature"],
         j2["signed_order"]["signature"]
@@ -224,14 +227,12 @@ fn make_order_deterministic_signature() {
 fn verify_order_valid_and_tampered() {
     let dir = temp_dir("verify_order_valid_and_tampered");
     let key_path = write_seed(&dir, "k.order-key");
-    let args: Vec<&str> = sample_make_order_args(key_path.to_str().unwrap())
-        .iter()
-        .map(String::as_str)
-        .collect();
+    let owned = sample_make_order_args(key_path.to_str().unwrap());
+    let args: Vec<&str> = owned.iter().map(String::as_str).collect();
     let out = Command::new(bin()).args(args).output().unwrap();
     assert!(out.status.success());
     let order_path = dir.join("order.json");
-    fs::write(&order_path, String::from_utf8_lossy(&out.stdout)).unwrap();
+    fs::write(&order_path, &out.stdout).unwrap();
     let verify = Command::new(bin())
         .args([
             "verify-order",
@@ -268,7 +269,7 @@ fn verify_order_valid_and_tampered() {
     cleanup(&dir);
 }
 
-fn write_pair(dir: &PathBuf) -> (PathBuf, PathBuf) {
+fn write_pair(dir: &Path) -> (PathBuf, PathBuf) {
     let alice_key = write_seed(dir, "alice.order-key");
     let bob_key = write_seed(dir, "bob.order-key");
     let buy_args = vec![
@@ -330,8 +331,8 @@ fn write_pair(dir: &PathBuf) -> (PathBuf, PathBuf) {
     let buy_out = Command::new(bin()).args(buy_args).output().unwrap();
     let sell_out = Command::new(bin()).args(sell_args).output().unwrap();
     assert!(buy_out.status.success() && sell_out.status.success());
-    fs::write(&buy_path, String::from_utf8_lossy(&buy_out.stdout)).unwrap();
-    fs::write(&sell_path, String::from_utf8_lossy(&sell_out.stdout)).unwrap();
+    fs::write(&buy_path, &buy_out.stdout).unwrap();
+    fs::write(&sell_path, &sell_out.stdout).unwrap();
     (buy_path, sell_path)
 }
 
@@ -353,7 +354,11 @@ fn settle_args_happy_path() {
         ])
         .output()
         .unwrap();
-    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let line: serde_json::Value =
         serde_json::from_str(String::from_utf8_lossy(&out.stdout).trim()).unwrap();
     let _buy: SignedOrder = serde_json::from_value(line["buy"].clone()).unwrap();
@@ -512,7 +517,7 @@ fn stdout_never_contains_seed_hex() {
 fn make_order_expires_in_secs() {
     let dir = temp_dir("make_order_expires_in_secs");
     let key_path = write_seed(&dir, "k.order-key");
-    let mut args = sample_make_order_args(key_path.to_str().unwrap());
+    let args = sample_make_order_args(key_path.to_str().unwrap());
     let mut filtered: Vec<String> = Vec::new();
     let mut skip_next = false;
     for a in args {

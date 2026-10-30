@@ -52,6 +52,20 @@ foreach ($id in $accounts) {
             'autogenerate-new-keypair', 'save-to-keychain',
             'network-config', 'testnet', 'create'
         ) -DryRun:$DryRun | Out-Null
+        if (-not $DryRun) {
+            # the faucet answers before every RPC node sees the account; later steps need to see it
+            $seen = $false
+            for ($i = 0; $i -lt 30; $i++) {
+                if (Get-AccountInfo -AccountId $id) {
+                    $seen = $true
+                    break
+                }
+                Start-Sleep -Seconds 2
+            }
+            if (-not $seen) {
+                throw "account $id is not visible on chain after 60 s"
+            }
+        }
     } catch {
         Write-Host "failed to create $id : $($_.Exception.Message)"
         Write-Host 'Re-run this script later; existing accounts are skipped.'
