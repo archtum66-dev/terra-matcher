@@ -117,7 +117,11 @@ The NEAR testnet escrow holds NEP-141 deposits as free balances, verifies ed2551
 
 ## Limits
 
-Quote and settlement fixtures are hand-written from public documentation, not recorded from a live system. Wallet message JSON shapes are marked `UNVERIFIED` in code until checked against `intents.near`. The escrow contract has unit tests, one interop test and two recorded testnet runs; it is not audited and not on mainnet. Gas of `settle` and `withdraw` is measured on testnet (see `docs/BENCHMARKS.md`); the gas of the token deposit is not recorded. The browser demo and the matcher benchmarks use the reference matcher and do not talk to NEAR.
+Quote and settlement fixtures are hand-written from public documentation, not recorded from a live system. Wallet message JSON shapes are marked `UNVERIFIED` in code until checked against `intents.near`. The escrow contract has unit tests, one interop test and three recorded testnet runs; it is not audited and not on mainnet. Gas of `settle` and `withdraw` is measured on testnet (see `docs/BENCHMARKS.md`); the gas of the token deposit is not recorded. The browser demo and the matcher benchmarks use the reference matcher and do not talk to NEAR.
+
+## Provenance
+
+Everything in this repository was written for this hackathon (first commit 29 October 2026). It sits in front of a private matching engine of the author that is not part of this repository and was not changed for the hackathon. The reference matcher here follows the same public interface; both were run on the same conformance vectors and on random messages, and their receipts, executions and best prices were identical.
 
 ## AI assistance
 
