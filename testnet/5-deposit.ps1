@@ -70,19 +70,6 @@ function Compare-DecimalStrings {
     return ($l.CompareTo($r))
 }
 
-$aliceQuoteBal = Get-EscrowBalance -Account $alice -Token $quote
-$bobBaseBal = Get-EscrowBalance -Account $bob -Token $base
-
-$skipMintDeposit = $false
-if (-not $Force) {
-    if ((Compare-DecimalStrings -Left $aliceQuoteBal -Right $QuoteAmount) -ge 0) {
-        if ((Compare-DecimalStrings -Left $bobBaseBal -Right $BaseAmount) -ge 0) {
-            Write-Host 'escrow balances already sufficient; skipping mint and deposit (use -Force to redo)'
-            $skipMintDeposit = $true
-        }
-    }
-}
-
 function Ensure-Storage {
     param(
         [string]$Token,
@@ -102,44 +89,91 @@ function Ensure-Storage {
     }
 }
 
-if (-not $skipMintDeposit) {
-    foreach ($token in @($base, $quote)) {
-        foreach ($acc in @($escrow, $alice, $bob)) {
-            Ensure-Storage -Token $token -Account $acc
-        }
+function Get-TokenBalance {
+    param(
+        [string]$Token,
+        [string]$Account
+    )
+    $v = Invoke-View -Contract $Token -Method 'ft_balance_of' -ArgsObject @{ account_id = $Account } -DryRun:$DryRun
+    if ($DryRun -or $null -eq $v) {
+        return '0'
     }
-
-    $null = Invoke-Near -NearArgs @(
-        'contract', 'call-function', 'as-transaction', $quote, 'mint', 'json-args', "{`"account_id`":`"$alice`",`"amount`":`"$QuoteAmount`"}",
-        'prepaid-gas', '30 Tgas', 'attached-deposit', '0 NEAR', 'sign-as', $quote,
-        'network-config', 'testnet', 'sign-with-keychain', 'send'
-    ) -DryRun:$DryRun
-
-    $null = Invoke-Near -NearArgs @(
-        'contract', 'call-function', 'as-transaction', $base, 'mint', 'json-args', "{`"account_id`":`"$bob`",`"amount`":`"$BaseAmount`"}",
-        'prepaid-gas', '30 Tgas', 'attached-deposit', '0 NEAR', 'sign-as', $base,
-        'network-config', 'testnet', 'sign-with-keychain', 'send'
-    ) -DryRun:$DryRun
-
-    $null = Invoke-Near -NearArgs @(
-        'contract', 'call-function', 'as-transaction', $quote, 'ft_transfer_call', 'json-args', "{`"receiver_id`":`"$escrow`",`"amount`":`"$QuoteAmount`",`"msg`":`"`"}",
-        'prepaid-gas', '100 Tgas', 'attached-deposit', '1 yoctoNEAR', 'sign-as', $alice,
-        'network-config', 'testnet', 'sign-with-keychain', 'send'
-    ) -DryRun:$DryRun
-
-    $null = Invoke-Near -NearArgs @(
-        'contract', 'call-function', 'as-transaction', $base, 'ft_transfer_call', 'json-args', "{`"receiver_id`":`"$escrow`",`"amount`":`"$BaseAmount`",`"msg`":`"`"}",
-        'prepaid-gas', '100 Tgas', 'attached-deposit', '1 yoctoNEAR', 'sign-as', $bob,
-        'network-config', 'testnet', 'sign-with-keychain', 'send'
-    ) -DryRun:$DryRun
+    return $v.ToString()
 }
 
+function Wait-EscrowCredit {
+    # Waits until the escrow shows the deposit. If it never does and the tokens are back with the sender, the token
+    # refunded the transfer, which means the escrow's ft_on_transfer failed: say so instead of a bare timeout.
+    param(
+        [string]$Token,
+        [string]$Sender,
+        [System.Numerics.BigInteger]$WantAtLeast,
+        [System.Numerics.BigInteger]$WalletBefore
+    )
+    try {
+        [void](Wait-ViewValue -Contract $escrow -Method 'balance_of' -ArgsObject @{ account_id = $Sender; token_id = $Token } -TimeoutSec 45 -Test {
+            param($v)
+            $null -ne $v -and [System.Numerics.BigInteger]::Parse([string]$v) -ge $WantAtLeast
+        })
+    } catch {
+        $walletNow = [System.Numerics.BigInteger]::Parse((Get-TokenBalance -Token $Token -Account $Sender))
+        if ($walletNow -ge $WalletBefore) {
+            throw "DEPOSIT REFUNDED: $Token returned the tokens to $Sender, so the escrow did not accept the transfer (its ft_on_transfer failed). Most likely the escrow on chain is not the current build. Start RUN-1-TO-7.bat again with the same prefix: step 3 replaces changed code and keeps the state. The log has the details."
+        }
+        throw
+    }
+}
+
+function Send-Deposit {
+    # Brings the escrow balance of $Sender for $Token up to $Amount: mints only what the wallet lacks, then calls ft_transfer_call.
+    param(
+        [string]$Token,
+        [string]$Sender,
+        [string]$TokenOwner,
+        [string]$Amount
+    )
+    $want = [System.Numerics.BigInteger]::Parse($Amount)
+    $held = [System.Numerics.BigInteger]::Parse((Get-EscrowBalance -Account $Sender -Token $Token))
+    $need = $want
+    if (-not $Force) {
+        if ($held -ge $want) {
+            Write-Host "escrow already holds $held of $Token for $Sender; nothing to deposit (use -Force to deposit again)"
+            return
+        }
+        $need = $want - $held
+    }
+    $wallet = [System.Numerics.BigInteger]::Parse((Get-TokenBalance -Token $Token -Account $Sender))
+    if ($wallet -lt $need) {
+        $missing = $need - $wallet
+        $null = Invoke-Near -NearArgs @(
+            'contract', 'call-function', 'as-transaction', $Token, 'mint', 'json-args', "{`"account_id`":`"$Sender`",`"amount`":`"$missing`"}",
+            'prepaid-gas', '30 Tgas', 'attached-deposit', '0 NEAR', 'sign-as', $TokenOwner,
+            'network-config', 'testnet', 'sign-with-keychain', 'send'
+        ) -DryRun:$DryRun
+        $wallet = $wallet + $missing
+    } else {
+        Write-Host "$Sender already holds $wallet of $Token; no mint needed"
+    }
+    $null = Invoke-Near -NearArgs @(
+        'contract', 'call-function', 'as-transaction', $Token, 'ft_transfer_call', 'json-args', "{`"receiver_id`":`"$escrow`",`"amount`":`"$need`",`"msg`":`"`"}",
+        'prepaid-gas', '100 Tgas', 'attached-deposit', '1 yoctoNEAR', 'sign-as', $Sender,
+        'network-config', 'testnet', 'sign-with-keychain', 'send'
+    ) -DryRun:$DryRun
+    if (-not $DryRun) {
+        Wait-EscrowCredit -Token $Token -Sender $Sender -WantAtLeast ($held + $need) -WalletBefore $wallet
+    }
+}
+
+foreach ($token in @($base, $quote)) {
+    foreach ($acc in @($escrow, $alice, $bob)) {
+        Ensure-Storage -Token $token -Account $acc
+    }
+}
+
+Send-Deposit -Token $quote -Sender $alice -TokenOwner $quote -Amount $QuoteAmount
+Send-Deposit -Token $base -Sender $bob -TokenOwner $base -Amount $BaseAmount
+
 if (-not $DryRun) {
-    $wantQuote = [System.Numerics.BigInteger]::Parse($QuoteAmount)
-    $wantBase = [System.Numerics.BigInteger]::Parse($BaseAmount)
-    # waits until the final block shows the deposit; throws with the last value on a timeout
-    [void](Wait-ViewValue -Contract $escrow -Method 'balance_of' -ArgsObject @{ account_id = $alice; token_id = $quote } -Test { param($v) $null -ne $v -and [System.Numerics.BigInteger]::Parse([string]$v) -ge $wantQuote })
-    [void](Wait-ViewValue -Contract $escrow -Method 'balance_of' -ArgsObject @{ account_id = $bob; token_id = $base } -Test { param($v) $null -ne $v -and [System.Numerics.BigInteger]::Parse([string]$v) -ge $wantBase })
     $aliceQuoteBal = Get-EscrowBalance -Account $alice -Token $quote
     $bobBaseBal = Get-EscrowBalance -Account $bob -Token $base
     Write-Host ''

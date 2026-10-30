@@ -64,7 +64,14 @@ impl Escrow {
         Self::default()
     }
 
-    pub fn ft_on_transfer(&mut self, sender_id: AccountId, amount: U128, _msg: String) -> U128 {
+    /// NEP-141 receiver hook.
+    ///
+    /// The parameter names are the JSON keys of the call. They must be exactly
+    /// `sender_id`, `amount` and `msg`: with `_msg` the call fails to deserialize,
+    /// the token refunds the whole transfer and nothing is credited. Never prefix an
+    /// exported parameter with an underscore (see the test `exported_argument_names`).
+    pub fn ft_on_transfer(&mut self, sender_id: AccountId, amount: U128, msg: String) -> U128 {
+        let _ = msg;
         let token = env::predecessor_account_id();
         let credit = amount.0;
         self.credit_balance(&sender_id, &token, credit);
@@ -104,8 +111,9 @@ impl Escrow {
         account_id: AccountId,
         token_id: AccountId,
         amount: U128,
-        _receiver_id: AccountId,
+        receiver_id: AccountId,
     ) {
+        let _ = receiver_id;
         if env::promise_results_count() != 1 {
             self.refund_failed_withdraw(&account_id, &token_id, amount.0);
             return;
@@ -1033,6 +1041,90 @@ mod tests {
         deposit(&mut c, alice.clone(), quote_token(), 100);
         assert_eq!(c.balance_of(accounts(2), quote_token()).0, 0);
         assert_eq!(c.balance_of(alice, quote_token()).0, 100);
+    }
+
+    /// JSON keys of the first function call among the receipts created so far.
+    fn created_call_keys(method: &str) -> Vec<String> {
+        for receipt in near_sdk::test_utils::get_created_receipts() {
+            for action in receipt.actions {
+                if let near_sdk::mock::MockAction::FunctionCallWeight {
+                    method_name, args, ..
+                } = action
+                {
+                    if method_name == method.as_bytes() {
+                        let v: near_sdk::serde_json::Value =
+                            near_sdk::serde_json::from_slice(&args).expect("json");
+                        let mut keys: Vec<String> =
+                            v.as_object().expect("object").keys().cloned().collect();
+                        keys.sort();
+                        return keys;
+                    }
+                }
+            }
+        }
+        panic!("no function call to {method} found");
+    }
+
+    /// Regression test for the first live testnet run: the generated JSON argument names
+    /// are the Rust parameter names, so `_msg` made every NEP-141 deposit fail and the
+    /// token refunded the whole transfer. Unit tests that call the Rust method directly
+    /// cannot see this, so the generated call arguments are checked here.
+    #[test]
+    fn exported_argument_names_match_nep141() {
+        set_predecessor(accounts(1));
+        let _ = Escrow::ext(accounts(0)).ft_on_transfer(accounts(1), U128(5), String::new());
+        assert_eq!(
+            created_call_keys("ft_on_transfer"),
+            vec!["amount", "msg", "sender_id"],
+            "NEP-141 receiver arguments must be sender_id, amount, msg"
+        );
+    }
+
+    #[test]
+    fn exported_argument_names_of_callback() {
+        let mut c = init_contract();
+        let alice = accounts(1);
+        deposit(&mut c, alice.clone(), quote_token(), 100);
+        let mut ctx = VMContextBuilder::new();
+        ctx.current_account_id(accounts(0));
+        ctx.predecessor_account_id(alice);
+        ctx.attached_deposit(NearToken::from_yoctonear(1));
+        testing_env!(ctx.build());
+        c.withdraw(quote_token(), U128(40), None);
+        assert_eq!(
+            created_call_keys("on_withdraw"),
+            vec!["account_id", "amount", "receiver_id", "token_id"]
+        );
+    }
+
+    /// No exported method may have a parameter that starts with an underscore.
+    #[test]
+    fn no_underscore_parameters_in_exported_methods() {
+        let src = include_str!("lib.rs");
+        let start = src.find("#[near]\nimpl Escrow {").expect("near impl");
+        let rest = &src[start..];
+        let end = rest[10..].find("\nimpl ").map_or(rest.len(), |i| i + 10);
+        let block = &rest[..end];
+        let mut bad = Vec::new();
+        for (no, line) in block.lines().enumerate() {
+            if line.trim_start().starts_with("//") {
+                continue;
+            }
+            let chars: Vec<char> = line.chars().collect();
+            for i in 0..chars.len() {
+                let prev_ok = i == 0 || chars[i - 1] == ' ' || chars[i - 1] == '(';
+                if chars[i] == '_' && prev_ok {
+                    let mut j = i + 1;
+                    while j < chars.len() && (chars[j].is_ascii_alphanumeric() || chars[j] == '_') {
+                        j += 1;
+                    }
+                    if j > i + 1 && j < chars.len() && chars[j] == ':' {
+                        bad.push(format!("line {}: {}", no + 1, line.trim()));
+                    }
+                }
+            }
+        }
+        assert!(bad.is_empty(), "underscore parameters: {bad:?}");
     }
 
     #[test]

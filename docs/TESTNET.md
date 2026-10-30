@@ -2,7 +2,7 @@
 
 The scripted version of this guide (all seven steps, with preflight and dry run) is in [`testnet/README.md`](../testnet/README.md).
 
-This document is a **do X, see Y** guide for deploying and exercising the escrow contract with [near-cli-rs](https://github.com/near/near-cli-rs). **Not yet run on a live network.** The commands were exercised against a local simulator of near-cli-rs and the RPC, and the orders made by `terra-keys` are accepted by the contract code in a test (`contract/escrow/tests/cli_interop.rs`). No recorded testnet run exists yet.
+This document is a **do X, see Y** guide for deploying and exercising the escrow contract with [near-cli-rs](https://github.com/near/near-cli-rs). **Live status:** a first run of the scripted version created the accounts, deployed the contracts, called `new`, registered keys and minted test tokens on testnet. The deposit step then showed that the escrow did not accept NEP-141 transfers: the argument of `ft_on_transfer` was named `_msg` in the Rust code, so the generated JSON reader expected a key `_msg`, the token's call (key `msg`) failed and the token refunded the whole amount. This is fixed (argument `msg`) and tested (`exported_argument_names_match_nep141`). The remaining steps (deposit, settle, withdraw) have not yet been recorded on testnet. The orders made by `terra-keys` are accepted by the contract code in a test (`contract/escrow/tests/cli_interop.rs`).
 
 Replace placeholders: `<ESCROW_ACCOUNT>`, `<ALICE>`, `<BOB>`, `<BASE_TOKEN>`, `<QUOTE_TOKEN>`.
 

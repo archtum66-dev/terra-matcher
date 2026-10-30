@@ -66,25 +66,57 @@ if (-not $DryRun) {
     }
 }
 
+function Wait-CodeOnChain {
+    # The final block can trail the transaction by a few seconds; wait until the account shows this exact code.
+    param(
+        [string]$Account,
+        [string]$WasmPath
+    )
+    $deadline = (Get-Date).AddSeconds(60)
+    while (-not (Test-ContractCodeMatches -AccountId $Account -WasmPath $WasmPath)) {
+        if ((Get-Date) -gt $deadline) {
+            throw "timeout: $Account does not show the code of $WasmPath"
+        }
+        Start-Sleep -Seconds 3
+    }
+}
+
 function Deploy-Contract {
     param(
         [string]$Account,
         [string]$WasmPath,
         [string]$InitJson
     )
-    if ((-not $Force) -and (Test-ContractDeployed -AccountId $Account)) {
-        Write-Host "contract already deployed, skipping: $Account"
-        return
+    if (-not $Force) {
+        if (Test-ContractDeployed -AccountId $Account) {
+            if (Test-ContractCodeMatches -AccountId $Account -WasmPath $WasmPath) {
+                Write-Host "contract already deployed with this code, skipping: $Account"
+                return
+            }
+            Write-Host "code on $Account differs from $WasmPath; deploying the local file (the contract state is kept)"
+        }
     }
     $null = Invoke-Near -NearArgs @(
         'contract', 'deploy', $Account, 'use-file', $WasmPath, 'without-init-call',
         'network-config', 'testnet', 'sign-with-keychain', 'send'
     ) -DryRun:$DryRun
-    $null = Invoke-Near -NearArgs @(
+    # `new` fails on a contract that is already initialised; that is fine after a code update
+    $init = Invoke-Near -NearArgs @(
         'contract', 'call-function', 'as-transaction', $Account, 'new', 'json-args', $InitJson,
         'prepaid-gas', '30 Tgas', 'attached-deposit', '0 NEAR', 'sign-as', $Account,
         'network-config', 'testnet', 'sign-with-keychain', 'send'
-    ) -DryRun:$DryRun
+    ) -DryRun:$DryRun -AllowFailure
+    if (-not $DryRun) {
+        $initText = [string]$init.StdOut + "`n" + [string]$init.StdErr
+        if (($init.ExitCode -ne 0) -or (Test-NearOutputFailed -Text $initText)) {
+            if ((Remove-AnsiCodes -Text $initText) -match 'already been initialized') {
+                Write-Host "state of $Account was already initialised; kept as it is"
+            } else {
+                throw "the init call on $Account failed (see the output above)"
+            }
+        }
+        Wait-CodeOnChain -Account $Account -WasmPath $WasmPath
+    }
 }
 
 Deploy-Contract -Account $escrow -WasmPath $escrowWasm -InitJson '{}'

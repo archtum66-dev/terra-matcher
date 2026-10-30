@@ -363,6 +363,66 @@ function Test-ContractDeployed {
     return ($info.code_hash -ne '11111111111111111111111111111111')
 }
 
+function ConvertTo-Base58 {
+    # Bitcoin-style base58, the form in which NEAR shows hashes (account code_hash, transaction IDs).
+    param(
+        [Parameter(Mandatory = $true)]
+        [byte[]]$Bytes
+    )
+    $alphabet = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
+    # one extra zero byte keeps the number positive; BigInteger wants little endian
+    $len = $Bytes.Length
+    $tmp = New-Object byte[] ($len + 1)
+    for ($i = 0; $i -lt $len; $i++) {
+        $tmp[$i] = $Bytes[$len - 1 - $i]
+    }
+    $n = New-Object System.Numerics.BigInteger (, $tmp)
+    $base = New-Object System.Numerics.BigInteger (58)
+    $sb = New-Object System.Text.StringBuilder
+    while (-not $n.IsZero) {
+        $rem = [System.Numerics.BigInteger]::Remainder($n, $base)
+        $n = [System.Numerics.BigInteger]::Divide($n, $base)
+        [void]$sb.Insert(0, $alphabet[[int]$rem])
+    }
+    foreach ($b in $Bytes) {
+        if ($b -ne 0) {
+            break
+        }
+        [void]$sb.Insert(0, '1')
+    }
+    return $sb.ToString()
+}
+
+function Get-FileHashBase58 {
+    # SHA-256 of a file in the base58 form that the chain reports as code_hash.
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path
+    )
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $hash = $sha.ComputeHash([System.IO.File]::ReadAllBytes($Path))
+    } finally {
+        $sha.Dispose()
+    }
+    return (ConvertTo-Base58 -Bytes $hash)
+}
+
+function Test-ContractCodeMatches {
+    # True when the code on the account is exactly the given WASM file.
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$AccountId,
+        [Parameter(Mandatory = $true)]
+        [string]$WasmPath
+    )
+    $info = Get-AccountInfo -AccountId $AccountId
+    if ($null -eq $info) {
+        return $false
+    }
+    return ($info.code_hash -eq (Get-FileHashBase58 -Path $WasmPath))
+}
+
 function Get-NearBalance {
     # Balance in NEAR as a decimal (4 places). 0 when the account does not exist.
     param(

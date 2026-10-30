@@ -68,7 +68,7 @@ Use `python3 web/build.py` instead of `--check` to regenerate `web/index.html` a
 | Another engine can replace the reference matcher | the same vectors and `terra gen` flows; outputs are compared line by line |
 | Commands in this README work | `crates/terra-cli/tests/cli.rs` starts the real binary for `demo`, `match`, `settle`, `gen`, `bench` |
 
-`cargo test --all` runs 57 tests offline. The contract has its own 27 tests and the test token 5 (see below).
+`cargo test --all` runs 57 tests offline. The contract has its own 30 tests (29 unit tests and one interop test) and the test token 5 (see below).
 
 ## Settlement
 
@@ -78,7 +78,7 @@ Each fill produces exactly one **pair** of unsigned `token_diff` intent drafts (
 
 The NEAR testnet escrow holds NEP-141 deposits as free balances, verifies ed25519-signed limit orders, and applies fills when anyone calls `settle`. Rules, error strings, and events are defined in `docs/ESCROW.md`. A manual testnet checklist is in `docs/TESTNET.md`. See [`testnet/README.md`](testnet/README.md) (Testnet run kit: scripts for the full run: accounts, deploy, keys, deposit, settle, withdraw).
 
-**State:** builds to wasm (about 360 KB), passes 26 unit tests and one interop test (orders made by `terra-keys` settle in the real contract code). **Not run on a live network, not audited.** The run kit in `testnet/` does the deployment and a full trade on testnet; it has only been exercised against a local simulator.
+**State:** builds to wasm (about 360 KB), passes 29 unit tests and one interop test (orders made by `terra-keys` settle in the real contract code). **Not audited.** The run kit in `testnet/` does the deployment and a full trade on testnet. A first live run worked up to the token deposit and found a real bug that the unit tests could not see (the argument name of the NEP-141 receiver hook: with `_msg` instead of `msg` the call cannot be read and the token refunds every deposit). It is fixed and covered by regression tests; the complete trade (deposit, settle, withdraw) has not yet been recorded on testnet.
 
 1. `cargo test --all` (repository root) runs the matcher, settlement and `escrow-types` tests. `cargo test -p escrow-types --features hash` adds the order-hash test.
 2. `cd contract/escrow && cargo test` runs the contract unit tests (the contract has its own Cargo workspace).
