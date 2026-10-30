@@ -54,7 +54,7 @@ cargo build -p terra-web --target wasm32-unknown-unknown --profile wasm --locked
 python3 web/build.py --check
 ```
 
-The build is reproducible on the same toolchain (Rust 1.97.0, Linux x86_64): two clean builds gave the same SHA-256.
+The build is reproducible on the same toolchain (Rust 1.97.0, pinned in `rust-toolchain.toml`; Linux x86_64): two clean builds gave the same SHA-256.
 Use `python3 web/build.py` instead of `--check` to regenerate `web/index.html` after changing the code.
 
 ## What is verified
@@ -78,7 +78,7 @@ Each fill produces exactly one **pair** of unsigned `token_diff` intent drafts (
 
 The NEAR testnet escrow holds NEP-141 deposits as free balances, verifies ed25519-signed limit orders, and applies fills when anyone calls `settle`. Rules, error strings, and events are defined in `docs/ESCROW.md`. A manual testnet checklist is in `docs/TESTNET.md`. See [`testnet/README.md`](testnet/README.md) (Testnet run kit: scripts for the full run: accounts, deploy, keys, deposit, settle, withdraw).
 
-**State:** builds to wasm (about 343 KB), passes 30 unit tests and one interop test (orders made by `terra-keys` settle in the real contract code). **Not audited.** The run kit in `testnet/` does the deployment and a full trade on testnet. The first live runs found two real bugs that the unit tests could not see: the argument name of the NEP-141 receiver hook (with `_msg` instead of `msg` the call cannot be read and the token refunds every deposit) and a build without `--cfg near` (contract errors then show only `unreachable`). Both are fixed and covered by checks. A complete trade (deposit, two fills, a rejected overfill, withdrawal) then ran on testnet on 30 October 2026, twice: `settle` burns about 4.4 Tgas and `withdraw` about 7 Tgas (`docs/BENCHMARKS.md`, with transaction links).
+**State:** builds to wasm (about 343 KB), passes 30 unit tests and one interop test (orders made by `terra-keys` settle in the real contract code). **Not audited.** The run kit in `testnet/` does the deployment and a full trade on testnet. The first live runs found two real bugs that the unit tests could not see: the argument name of the NEP-141 receiver hook (with `_msg` instead of `msg` the call cannot be read and the token refunds every deposit) and a build without `--cfg near` (contract errors then show only `unreachable`). Both are fixed and covered by checks. A complete trade (deposit, two fills, a rejected overfill, withdrawal) then ran on testnet on 30 October 2026, three times (the code on chain is the file in this repository, checked by its code hash): `settle` burns about 4.4 Tgas and `withdraw` about 7 Tgas (`docs/BENCHMARKS.md`, with transaction links).
 
 1. `cargo test --all` (repository root) runs the matcher, settlement and `escrow-types` tests. `cargo test -p escrow-types --features hash` adds the order-hash test.
 2. `cd contract/escrow && cargo test` runs the contract unit tests (the contract has its own Cargo workspace).

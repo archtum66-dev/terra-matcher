@@ -12,13 +12,13 @@ Everything here is measured with commands in this repository. Nothing is estimat
 | Does the browser demo match the command line? | 3000 random messages through the WebAssembly module and through `terra match` | **byte-identical** output (4157 lines, 1157 fills, 688 rejections) |
 | How large is the browser module? | `cargo build -p terra-web --target wasm32-unknown-unknown --profile wasm --locked` | **267 KB** (the whole demo page, module included, is 383 KB) |
 | How large is the escrow contract? | `cd contract/escrow && RUSTFLAGS="--cfg near" cargo build --target wasm32-unknown-unknown --release` | **343 KB** wasm (351,397 bytes) |
-| What does one `settle` cost on testnet? | `testnet/RUN-1-TO-7.bat`, two complete runs | **4.4 to 4.5 Tgas** burnt in total (4.36, 4.45, 4.42, 4.46); fee about **0.0004 NEAR**. One fill, the signatures of both orders are verified |
-| What does one `withdraw` cost on testnet? | same | **6.95 Tgas** burnt in total (6.947 to 6.957 in eight calls), including the token's `ft_transfer` and the callback; fee about **0.00063 NEAR** |
-| Does the whole trade work on a real network? | same | **Yes, twice.** Deposit of both tokens, two fills (3 lots at 95, 2 lots at 100), an overfill rejected with `overfill`, four withdrawals; final balances match the fills |
+| What does one `settle` cost on testnet? | `testnet/RUN-1-TO-7.bat`, three complete runs | **4.4 to 4.5 Tgas** burnt in total (4.36 to 4.46 in six calls); fee about **0.0004 NEAR**. One fill, the signatures of both orders are verified |
+| What does one `withdraw` cost on testnet? | same | **6.95 Tgas** burnt in total (6.947 to 6.957 in twelve calls), including the token's `ft_transfer` and the callback; fee about **0.00063 NEAR** |
+| Does the whole trade work on a real network? | same | **Yes, three times.** Deposit of both tokens, two fills (3 lots at 95, 2 lots at 100), an overfill rejected with `overfill`, four withdrawals; final balances match the fills |
 
 ## Testnet run (30 October 2026)
 
-The run kit in `testnet/` created five accounts (`ag2610-escrow`, `-alice`, `-bob`, `-base`, `-quote`, all `.testnet`), deployed the escrow and two test tokens, registered both order keys, deposited, settled twice, tried an overfill and withdrew everything. It was run twice on the same accounts; the second run deposited again because the first had withdrawn all balances. near-cli-rs 0.30.1, escrow built with `--cfg near` (351,368 bytes in these two runs), test token 300,274 bytes.
+The run kit in `testnet/` created five accounts (`ag2610-escrow`, `-alice`, `-bob`, `-base`, `-quote`, all `.testnet`), deployed the escrow and two test tokens, registered both order keys, deposited, settled twice, tried an overfill and withdrew everything. It was run three times on the same accounts; each later run deposited again because the run before had withdrawn all balances. near-cli-rs 0.30.1, escrow built with `--cfg near` (351,368 bytes in runs 1 and 2; 351,397 bytes in run 3, after an overflow check was added to the balance credit), test token 300,274 bytes.
 
 Gas is the sum of `gas_burnt` over the transaction and all its receipts, read from the RPC. Fees are the burnt tokens of the same calls. Every row is a real testnet transaction; the links open the explorer.
 
@@ -32,8 +32,22 @@ Gas is the sum of `gas_burnt` over the transaction and all its receipts, read fr
 | withdraw-bob-base | 6.95 | 6.95 | 0.00063 | [HFTCLHho…](https://testnet.nearblocks.io/txns/HFTCLHho5NzYVcPpTWRL76hNTn86EUJGGhiZ8Rbb8mLf) | [B7zpCrpV…](https://testnet.nearblocks.io/txns/B7zpCrpVkB1QU6Kx3JXvyHZqRiEsFANYiQcC9XbuPgUi) |
 | withdraw-bob-quote | 6.95 | 6.95 | 0.00063 | [FNaZ56BM…](https://testnet.nearblocks.io/txns/FNaZ56BMBb4Nsaugsj4KpmAm81LF1gBmu8dLJQHm85LA) | [9PoVpHTg…](https://testnet.nearblocks.io/txns/9PoVpHTgvKCamNYK9fHbMrYih3QdjoH2he34SNeb32X) |
 
+**Run 3** used the final contract code of this repository (the table above is runs 1 and 2):
+
+| Call | Tgas run 3 | Fee run 3 (NEAR) | Transaction run 3 |
+|---|---:|---:|---|
+| settle-1 | 4.43 | 0.00042 | [LdBGGeKz…](https://testnet.nearblocks.io/txns/LdBGGeKzHonacRbicu61TdEYsv3g7ZYBFkYbX8wMwUa) |
+| settle-2 | 4.46 | 0.00042 | [3MnUkZXn…](https://testnet.nearblocks.io/txns/3MnUkZXnLPrbXH2TQZWndaAxeQR6qvkjZVem7rJ41LPG) |
+| settle-overfill-rejected | - | - | rejected with `overfill`, as intended |
+| withdraw-alice-base | 6.96 | 0.00063 | [GUfD7JXB…](https://testnet.nearblocks.io/txns/GUfD7JXBwqTR534VWVVnLysfEeDs5v4n8smaSZ1WpQWW) |
+| withdraw-alice-quote | 6.95 | 0.00063 | [5roXcEx8…](https://testnet.nearblocks.io/txns/5roXcEx8CQoLBcS59zeyEEht5GmQEi57Z8uzXpCoZKPD) |
+| withdraw-bob-base | 6.95 | 0.00063 | [4M1Lwx8f…](https://testnet.nearblocks.io/txns/4M1Lwx8fBeDZjbqyLuZ8u3JTeVfKZ5HYkidsJKatKBRf) |
+| withdraw-bob-quote | 6.95 | 0.00063 | [7G5X7o6H…](https://testnet.nearblocks.io/txns/7G5X7o6HoDY3TcPBkhSwzA8q9DKuvYyHGK6dethHyk3C) |
+
+After run 3 the escrow account holds exactly the code in this repository: its code hash on chain is `CqNy4yyFdW8FodZjFVyEYfxxmApygSYqmZzs5x9XLxjA`, the base58 form of the SHA-256 `afd545d9…5fe1` in `testnet/wasm/SHA256SUMS.txt`. Both test tokens carry the code of `terra_test_token.wasm`, too.
+
 **Settled in each run:** 3 lots at price 95 (285,000 quote units) and 2 lots at price 100 (200,000 quote units), 5,000,000 base units in total.
-**Final balances after the withdrawals, both runs:** Alice 5,000,000 base and 999,515,000 quote; Bob 95,000,000 base and 485,000 quote. All four balances were withdrawn; the amounts match the fills (for example Alice: 1,000,000,000 deposited minus 485,000 paid = 999,515,000).
+**Final balances after the withdrawals, all three runs:** Alice 5,000,000 base and 999,515,000 quote; Bob 95,000,000 base and 485,000 quote. All four balances were withdrawn; the amounts match the fills (for example Alice: 1,000,000,000 deposited minus 485,000 paid = 999,515,000).
 **Reading the numbers:** a transaction may use at most 300 Tgas, so one `settle` takes about 1.5 % of that. The 100 Tgas attached by the kit is far more than needed; the contract itself reserves 30 + 10 Tgas for the token transfer and the callback of `withdraw`, so at least 60 Tgas must stay attached to `withdraw`.
 
 ## The order flow

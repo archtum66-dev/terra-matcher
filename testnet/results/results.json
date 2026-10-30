@@ -138,5 +138,75 @@
         "tokens_burnt":  "627761251075100000000",
         "ok":  true,
         "time_utc":  "2026-10-30T15:56:14Z"
+    },
+    {
+        "label":  "settle-1",
+        "signer":  "ag2610-base.testnet",
+        "method":  "settle",
+        "tx_hash":  "LdBGGeKzHonacRbicu61TdEYsv3g7ZYBFkYbX8wMwUa",
+        "gas_burnt":  4427903381581,
+        "tokens_burnt":  "420472081908100000000",
+        "ok":  true,
+        "time_utc":  "2026-10-30T20:05:33Z"
+    },
+    {
+        "label":  "settle-2",
+        "signer":  "ag2610-base.testnet",
+        "method":  "settle",
+        "tx_hash":  "3MnUkZXnLPrbXH2TQZWndaAxeQR6qvkjZVem7rJ41LPG",
+        "gas_burnt":  4463810374941,
+        "tokens_burnt":  "424062781244100000000",
+        "ok":  true,
+        "time_utc":  "2026-10-30T20:05:37Z"
+    },
+    {
+        "label":  "settle-overfill-rejected",
+        "signer":  "ag2610-base.testnet",
+        "method":  "settle",
+        "tx_hash":  "",
+        "gas_burnt":  0,
+        "tokens_burnt":  "0",
+        "ok":  false,
+        "time_utc":  "2026-10-30T20:05:41Z"
+    },
+    {
+        "label":  "withdraw-alice-base",
+        "signer":  "ag2610-alice.testnet",
+        "method":  "withdraw",
+        "tx_hash":  "GUfD7JXBwqTR534VWVVnLysfEeDs5v4n8smaSZ1WpQWW",
+        "gas_burnt":  6956729260652,
+        "tokens_burnt":  "628718157315200000000",
+        "ok":  true,
+        "time_utc":  "2026-10-30T20:05:47Z"
+    },
+    {
+        "label":  "withdraw-alice-quote",
+        "signer":  "ag2610-alice.testnet",
+        "method":  "withdraw",
+        "tx_hash":  "5roXcEx8CQoLBcS59zeyEEht5GmQEi57Z8uzXpCoZKPD",
+        "gas_burnt":  6953928208763,
+        "tokens_burnt":  "628438052126300000000",
+        "ok":  true,
+        "time_utc":  "2026-10-30T20:05:53Z"
+    },
+    {
+        "label":  "withdraw-bob-base",
+        "signer":  "ag2610-bob.testnet",
+        "method":  "withdraw",
+        "tx_hash":  "4M1Lwx8fBeDZjbqyLuZ8u3JTeVfKZ5HYkidsJKatKBRf",
+        "gas_burnt":  6954848012822,
+        "tokens_burnt":  "628530032532200000000",
+        "ok":  true,
+        "time_utc":  "2026-10-30T20:05:58Z"
+    },
+    {
+        "label":  "withdraw-bob-quote",
+        "signer":  "ag2610-bob.testnet",
+        "method":  "withdraw",
+        "tx_hash":  "7G5X7o6HoDY3TcPBkhSwzA8q9DKuvYyHGK6dethHyk3C",
+        "gas_burnt":  6947223377361,
+        "tokens_burnt":  "627767568986100000000",
+        "ok":  true,
+        "time_utc":  "2026-10-30T20:06:04Z"
     }
 ]

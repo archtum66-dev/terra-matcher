@@ -16,3 +16,10 @@
 | withdraw-alice-quote | 7 | [13ySDfvKx6zbJidXWdmPLLjWcPSgVgTK5yzjFCvAGur3](https://testnet.nearblocks.io/txns/13ySDfvKx6zbJidXWdmPLLjWcPSgVgTK5yzjFCvAGur3) |
 | withdraw-bob-base | 7 | [B7zpCrpVkB1QU6Kx3JXvyHZqRiEsFANYiQcC9XbuPgUi](https://testnet.nearblocks.io/txns/B7zpCrpVkB1QU6Kx3JXvyHZqRiEsFANYiQcC9XbuPgUi) |
 | withdraw-bob-quote | 6.9 | [9PoVpHTgvKCamNYK9fHbMrYih3QdjoH2he34SNeb32X](https://testnet.nearblocks.io/txns/9PoVpHTgvKCamNYK9fHbMrYih3QdjoH2he34SNeb32X) |
+| settle-1 | 4.4 | [LdBGGeKzHonacRbicu61TdEYsv3g7ZYBFkYbX8wMwUa](https://testnet.nearblocks.io/txns/LdBGGeKzHonacRbicu61TdEYsv3g7ZYBFkYbX8wMwUa) |
+| settle-2 | 4.5 | [3MnUkZXnLPrbXH2TQZWndaAxeQR6qvkjZVem7rJ41LPG](https://testnet.nearblocks.io/txns/3MnUkZXnLPrbXH2TQZWndaAxeQR6qvkjZVem7rJ41LPG) |
+| settle-overfill-rejected | 0 | []() |
+| withdraw-alice-base | 7 | [GUfD7JXBwqTR534VWVVnLysfEeDs5v4n8smaSZ1WpQWW](https://testnet.nearblocks.io/txns/GUfD7JXBwqTR534VWVVnLysfEeDs5v4n8smaSZ1WpQWW) |
+| withdraw-alice-quote | 7 | [5roXcEx8CQoLBcS59zeyEEht5GmQEi57Z8uzXpCoZKPD](https://testnet.nearblocks.io/txns/5roXcEx8CQoLBcS59zeyEEht5GmQEi57Z8uzXpCoZKPD) |
+| withdraw-bob-base | 7 | [4M1Lwx8fBeDZjbqyLuZ8u3JTeVfKZ5HYkidsJKatKBRf](https://testnet.nearblocks.io/txns/4M1Lwx8fBeDZjbqyLuZ8u3JTeVfKZ5HYkidsJKatKBRf) |
+| withdraw-bob-quote | 6.9 | [7G5X7o6HoDY3TcPBkhSwzA8q9DKuvYyHGK6dethHyk3C](https://testnet.nearblocks.io/txns/7G5X7o6HoDY3TcPBkhSwzA8q9DKuvYyHGK6dethHyk3C) |

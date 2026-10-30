@@ -2,7 +2,7 @@
 
 PowerShell scripts that put the escrow contract and two test tokens on NEAR **testnet** and run a full trade: deposit, two partial fills, a rejected overfill, withdrawal. For the contract rules see `docs/ESCROW.md`.
 
-**Status:** the complete run (steps 1 to 7) worked on the real testnet on 30 October 2026, and again on a second start with the same prefix, using near-cli-rs v0.30.1. The measured gas and the transaction links are in `docs/BENCHMARKS.md`. Two bugs found on the way are fixed (see "Lessons from the live runs" below). The scripts are also tested against a local simulator of near-cli-rs and of the RPC (command forms, JSON arguments, re-runs, stale views, failing exit codes, a refunded deposit). Testnet only: every script refuses the word `mainnet`. Transactions are sent only when you start a script.
+**Status:** the complete run (steps 1 to 7) worked on the real testnet on 30 October 2026, and twice more on later starts with the same prefix, using near-cli-rs v0.30.1. The measured gas and the transaction links are in `docs/BENCHMARKS.md`. Two bugs found on the way are fixed (see "Lessons from the live runs" below). The scripts are also tested against a local simulator of near-cli-rs and of the RPC (command forms, JSON arguments, re-runs, stale views, failing exit codes, a refunded deposit). Testnet only: every script refuses the word `mainnet`. Transactions are sent only when you start a script.
 
 ## Quick start
 
