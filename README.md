@@ -151,4 +151,4 @@ Quote and settlement fixtures are hand-written from public documentation, not re
 
 ## Related project
 
-The author has one other, independent hackathon project: **Sealed Dossier**, a privacy tool that asks a confidential model on NEAR AI Cloud about a case file with all names replaced and keeps signed receipts (track `privacy`), submitted separately: https://github.com/archtum66-dev/sealed-dossier. The two repositories share no code.
+The author has one other, independent hackathon project: **Sealed Dossier**, a privacy tool that asks a confidential model on NEAR AI Cloud about a case file with all names replaced and keeps signed receipts (track `privacy`), submitted separately. Its repository is private until its own submission, planned for 9 to 12 November 2026 (inside the development phase); it will then be public at https://github.com/archtum66-dev/sealed-dossier. The two repositories share no code.
