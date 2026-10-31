@@ -148,3 +148,7 @@ Quote and settlement fixtures are hand-written from public documentation, not re
 - **Drafted with AI:** code and documents were drafted with Cursor (models Grok and Composer) and Claude.
 - **Checked by:** tests (57 plus 31), three recorded testnet runs, and one read-only review pass of the whole repository.
 - **Author:** set the scope, approved every step and ran the testnet transactions.
+
+## Related project
+
+The author has one other, independent hackathon project: **Sealed Dossier**, a privacy tool that asks a confidential model on NEAR AI Cloud about a case file with all names replaced and keeps signed receipts (track `privacy`), submitted separately: https://github.com/archtum66-dev/sealed-dossier. The two repositories share no code.
