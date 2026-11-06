@@ -2,7 +2,7 @@
 name = "terra-web"
 version = "0.1.0"
 edition = "2021"
-license = "MIT"
+license = "PolyForm-Noncommercial-1.0.0"
 description = "The reference matcher and settlement drafts as a WebAssembly module for the browser demo."
 
 [lib]

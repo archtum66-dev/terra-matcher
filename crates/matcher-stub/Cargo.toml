@@ -2,7 +2,7 @@
 name = "matcher-stub"
 version = "0.1.0"
 edition = "2021"
-license = "MIT"
+license = "PolyForm-Noncommercial-1.0.0"
 
 [dependencies]
 matcher-api = { path = "../matcher-api" }
