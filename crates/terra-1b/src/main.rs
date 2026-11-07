@@ -37,8 +37,10 @@ fn usage() {
     eprintln!("  terra-1b keys     --out <keys.json>                 make two throwaway keys (seller, buyer)");
     eprintln!("  terra-1b accounts --keys <keys.json>                public accounts and keys (no secrets)");
     eprintln!("  terra-1b balances --keys <keys.json> --market <market.json>");
-    eprintln!("  terra-1b plan     --keys <keys.json> --market <m.json> --orders <o.jsonl>   sign + simulate, sends nothing");
-    eprintln!("  terra-1b execute  --keys <keys.json> --market <m.json> --orders <o.jsonl> [--record <dir>]   asks for typed confirmation");
+    eprintln!("  terra-1b plan     --keys <keys.json> --market <m.json> --orders <o.jsonl> [--reverse]   sign + simulate, sends nothing");
+    eprintln!("  terra-1b execute  --keys <keys.json> --market <m.json> --orders <o.jsonl> [--reverse] [--record <dir>]   asks for typed confirmation");
+    eprintln!("  --reverse: the two accounts swap roles (the buyer account of the first run now gives NEAR and the seller account gives USDC);");
+    eprintln!("             the seller account of the keys file still pays the network fee");
     eprintln!("  terra-1b fund-quote --account <64 hex> --origin <asset> --dest <asset> --amount <units> --refund-to <address> [--dest-chain]");
     eprintln!("  terra-1b selftest                                    transaction format check against the live RPC (random account, no funds)");
 }
@@ -177,6 +179,27 @@ fn read_keys(path: &str) -> Result<(Party, Party), String> {
     Ok((read_party(&v["seller"])?, read_party(&v["buyer"])?))
 }
 
+/// Accounts in their roles for one fill: (gives NEAR, gives USDC). `--reverse` swaps the
+/// two accounts of the keys file, so a second fill can run the other way round with the
+/// balances the first fill left behind. The fee is always paid by the first account of
+/// the keys file (`seller`), the only one that holds native NEAR.
+fn assign_roles(first: Party, second: Party, reverse: bool) -> (Party, Party) {
+    if reverse {
+        (second, first)
+    } else {
+        (first, second)
+    }
+}
+
+fn is_reverse(args: &[String]) -> bool {
+    args.iter().any(|a| a == "--reverse")
+}
+
+fn read_roles(args: &[String]) -> Result<(Party, Party), String> {
+    let (first, second) = read_keys(&need(args, "--keys"))?;
+    Ok(assign_roles(first, second, is_reverse(args)))
+}
+
 fn cmd_keys(args: &[String]) -> Result<(), String> {
     let out = need(args, "--out");
     if Path::new(&out).exists() {
@@ -304,6 +327,7 @@ fn token_balance(market: &Market, account: &str) -> Result<(u128, u128), String>
 struct Balances {
     seller_base: u128,
     seller_native: u128,
+    buyer_native: u128,
     buyer_quote: u128,
 }
 
@@ -332,6 +356,7 @@ fn read_balances(market: &Market, seller: &Party, buyer: &Party) -> Result<Balan
     Ok(Balances {
         seller_base: s_base,
         seller_native: s_native,
+        buyer_native: b_native,
         buyer_quote: b_quote,
     })
 }
@@ -434,10 +459,14 @@ fn money(base: u128, quote: u128) -> String {
 
 /// Builds, signs, checks balances and runs `simulate_intents`. Sends nothing.
 fn plan(args: &[String]) -> Result<(Party, Party, Prepared, bool), String> {
-    let (seller, buyer) = read_keys(&need(args, "--keys"))?;
+    let (seller, buyer) = read_roles(args)?;
+    let reverse = is_reverse(args);
     let market = read_market(&need(args, "--market"))?;
     let prep = prepare(args, &seller, &buyer)?;
     println!("Fill: {}", money(prep.base, prep.quote));
+    if reverse {
+        println!("Reverse run: the two accounts of the keys file swapped roles");
+    }
     println!("Seller (gives NEAR): {}", seller.account);
     println!("Buyer  (gives USDC): {}", buyer.account);
     println!(
@@ -447,10 +476,15 @@ fn plan(args: &[String]) -> Result<(Party, Party, Prepared, bool), String> {
     let bal = read_balances(&market, &seller, &buyer)?;
     let funded_base = bal.seller_base >= prep.base;
     let funded_quote = bal.buyer_quote >= prep.quote;
-    let funded_gas = bal.seller_native >= MIN_GAS_BALANCE_YOCTO;
+    let payer_native = if reverse {
+        bal.buyer_native
+    } else {
+        bal.seller_native
+    };
+    let funded_gas = payer_native >= MIN_GAS_BALANCE_YOCTO;
     println!("Seller holds enough NEAR in the verifier: {funded_base}");
     println!("Buyer holds enough USDC in the verifier:  {funded_quote}");
-    println!("Seller account holds NEAR for the fee (>= 0.04): {funded_gas}");
+    println!("Account that pays the network fee holds NEAR for it (>= 0.04): {funded_gas}");
     let sim = view_call(
         intents_sign::VERIFIER,
         "simulate_intents",
@@ -555,6 +589,9 @@ fn cmd_execute(args: &[String]) -> Result<(), String> {
     if !ready {
         return Err("not ready: nothing was sent".to_string());
     }
+    // The network fee is paid by the first account of the keys file, in either direction.
+    let reverse = is_reverse(args);
+    let payer = if reverse { &buyer } else { &seller };
     println!();
     println!(
         "This sends ONE real transaction on NEAR mainnet: execute_intents on {}",
@@ -565,7 +602,8 @@ fn cmd_execute(args: &[String]) -> Result<(), String> {
         money(prep.base, prep.quote)
     );
     println!(
-        "The fee is paid from the seller account (at most 0.04 NEAR, unused gas is refunded)."
+        "The network fee is paid from account {} (at most 0.04 NEAR, unused gas is refunded).",
+        payer.account
     );
     print!("Type exactly {CONFIRM_WORDS} and press Enter to send, anything else cancels: ");
     io::stdout().flush().map_err(|e| e.to_string())?;
@@ -577,10 +615,10 @@ fn cmd_execute(args: &[String]) -> Result<(), String> {
     if line.trim() != CONFIRM_WORDS {
         return Err("cancelled: nothing was sent".to_string());
     }
-    let (nonce, block_hash) = access_key_state(&seller)?;
+    let (nonce, block_hash) = access_key_state(payer)?;
     let call_args = json!({"signed": prep.signed}).to_string();
     let (signed_tx, tx_hash) = build_signed_tx(
-        &seller,
+        payer,
         intents_sign::VERIFIER,
         nonce + 1,
         &block_hash,
@@ -614,11 +652,11 @@ fn cmd_execute(args: &[String]) -> Result<(), String> {
     let after = read_balances(&market, &seller, &buyer)?;
     let record = json!({
         "tx_hash": tx_hash, "ok": ok, "network": "mainnet", "verifier": intents_sign::VERIFIER,
-        "seller": seller.account, "buyer": buyer.account,
+        "seller": seller.account, "buyer": buyer.account, "signer": payer.account, "reverse": reverse,
         "base_yocto": prep.base.to_string(), "quote_units": prep.quote.to_string(),
         "fee_pips": prep.fee_pips, "events": events,
         "gas_burnt_total": result["receipts_outcome"].as_array().map(|a| a.iter().filter_map(|r| r["outcome"]["gas_burnt"].as_u64()).sum::<u64>()).unwrap_or(0) + result["transaction_outcome"]["outcome"]["gas_burnt"].as_u64().unwrap_or(0),
-        "seller_native_after_yocto": after.seller_native.to_string(),
+        "payer_native_after_yocto": (if reverse { after.buyer_native } else { after.seller_native }).to_string(),
         "time_utc": iso_utc(now_secs()),
     });
     let dir = flag(args, "--record").unwrap_or_else(|| ".".to_string());
@@ -771,7 +809,7 @@ mod tests {
     }
 
     #[test]
-    fn keys_file_round_trips_and_hides_nothing_public() {
+    fn keys_file_round_trips_and_reverse_swaps_roles() {
         let k = intents_sign::random_key();
         let v = party_json(&k);
         let p = read_party(&v).unwrap();
@@ -791,6 +829,29 @@ mod tests {
         let mut bad = v.clone();
         bad["account"] = Value::String("00".repeat(32));
         assert!(read_party(&bad).is_err());
+        // `--reverse` swaps the roles of the two accounts and nothing else
+        let a = intents_sign::random_key();
+        let b = intents_sign::random_key();
+        let (a_acc, b_acc) = (
+            intents_sign::implicit_account(&a),
+            intents_sign::implicit_account(&b),
+        );
+        let mk = |k: SigningKey| Party {
+            account: intents_sign::implicit_account(&k),
+            key: k,
+        };
+        let (s, y) = assign_roles(mk(a.clone()), mk(b.clone()), false);
+        assert_eq!(
+            (s.account.as_str(), y.account.as_str()),
+            (a_acc.as_str(), b_acc.as_str())
+        );
+        let (s, y) = assign_roles(mk(a), mk(b), true);
+        assert_eq!(
+            (s.account.as_str(), y.account.as_str()),
+            (b_acc.as_str(), a_acc.as_str())
+        );
+        assert!(is_reverse(&["plan".to_string(), "--reverse".to_string()]));
+        assert!(!is_reverse(&["plan".to_string()]));
     }
 
     #[test]

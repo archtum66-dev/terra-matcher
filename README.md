@@ -4,6 +4,14 @@ Non-custodial order matching for a NEAR Intents exchange. Limit orders are paire
 
 **Status:** early scaffold, honestly labelled. Working and tested: matcher interface, 22 conformance vectors, reference matcher, settlement mapping, live price check against NEAR Intents (1Click API, dry quotes, no funds), NEP-413 signing **accepted by `intents.near` in simulation**, **one real fill settled on NEAR mainnet through `intents.near`** (7 November 2026, see "A real settlement on mainnet"), command-line tool, browser demo. Escrow contract: unit-tested and run end to end on NEAR testnet (testnet only, not audited).
 
+## Verify in 3 steps
+
+1. **`python3 scripts/check-mainnet-tx.py`**: reads the real mainnet settlement (1 NEAR for 3.68 USDC through `intents.near`) from a public RPC node and checks it against the recording. Python 3 only, no install, no keys. Last line: `ALL CHECKS PASSED`.
+2. **Open the [online demo](https://archtum66-dev.github.io/terra-matcher/)**: the matcher in your browser, offline; the chip shows 22/22 conformance vectors.
+3. **`cargo test --all`**: 68 tests pass, offline.
+
+What this does not show: one fill between two throwaway accounts of the author, at the price of the example orders. It is not a running exchange (see "Limits").
+
 ## Try it in 30 seconds (no install)
 
 Open **https://archtum66-dev.github.io/terra-matcher/** or the file **`web/index.html`** in any current browser. The online copy is byte-identical to `web/index.html` (branch `gh-pages`, GitHub Pages). It is one self-contained file: the reference matcher runs as WebAssembly, offline, with no server, no keys and no network.
@@ -15,10 +23,11 @@ Open **https://archtum66-dev.github.io/terra-matcher/** or the file **`web/index
 
 The page embeds a 267 KB module built from `crates/web-demo`. `python3 web/build.py --check` fails unless the committed page equals a fresh build, see "Rebuild the demo" below.
 
-## For judges: six checks, five minutes
+## For judges: seven checks, five minutes
 
 | Do | See |
 |---|---|
+| Run **`python3 scripts/check-mainnet-tx.py`** | the **real mainnet settlement** read from a public RPC node: transaction succeeded on `intents.near`, two `token_diff` events, each side gave the recorded amount, received it minus the verifier fee, nothing created or lost, events equal the recording in `docs/live/`; `ALL CHECKS PASSED` |
 | Open the **[online demo](https://archtum66-dev.github.io/terra-matcher/)** or `web/index.html` | the order book, the fills and the unsigned `token_diff` pairs; the chip shows **22/22 conformance vectors pass** |
 | Run **`cargo test --all`** | **68 tests pass**, offline |
 | Run **`python3 testnet/check-onchain.py`** | **`OK`**: the escrow on NEAR testnet (`ag2610-escrow.testnet`) has the code hash of the file in `testnet/wasm/SHA256SUMS.txt` |
@@ -106,7 +115,7 @@ The NEAR testnet escrow holds NEP-141 deposits as free balances, verifies ed2551
 | `matcher-stub` | Public reference matcher (`StubMatcher`) |
 | `settlement` | Fill → `token_diff` pair, wallet message helpers, 1Click quote client |
 | `intents-sign` | NEP-413 signing for `intents.near`, versioned nonce V1, protocol fee on a pair |
-| `terra-1b` | `terra-1b` binary for the real mainnet run: throwaway keys, balances, `plan` (sign and `simulate_intents`, sends nothing), `execute` (one `execute_intents` after a typed confirmation), `fund-quote` (1Click deposit address) |
+| `terra-1b` | `terra-1b` binary for the real mainnet run: throwaway keys, balances, `plan` (sign and `simulate_intents`, sends nothing), `execute` (one `execute_intents` after a typed confirmation), `--reverse` (the two accounts swap roles for a fill the other way round), `fund-quote` (1Click deposit address) |
 | `terra-cli` | `terra` binary: `match`, `settle`, `demo`, `gen`, `bench`; with `--features http` also `live-check`, `intents-check`, `quote` |
 | `terra-keys` | Order key generation and signing for the testnet run kit: `keygen`, `pubkey`, `make-order`, `settle-args`, `verify-order` |
 | `web-demo` (`terra-web`) | The reference matcher and settlement drafts as a WebAssembly module for `web/index.html` |
@@ -121,6 +130,7 @@ The NEAR testnet escrow holds NEP-141 deposits as free balances, verifies ed2551
 | `testnet/` | PowerShell run kit for testnet: accounts, deploy, keys, deposit, settle, withdraw; `check-onchain.py` compares the deployed code hash with `wasm/SHA256SUMS.txt` |
 | `web/` | Browser demo: `index.html` (built), `index.template.html`, `build.py` |
 | `tests/vectors/` | Public conformance vectors (JSON) |
+| `scripts/` | `check-mainnet-tx.py`: read-only check of the recorded mainnet settlement against a public RPC node (Python 3, no packages) |
 | `docs/` | `SPEC.md`, `BENCHMARKS.md`, `ESCROW.md`, `TESTNET.md`, `INTENTS_FACTS.md`, `live/` (recorded `intents-check` run and the real `terra-1b` settlement) |
 | `examples/` | Example market and orders; `mainnet/` with the real token ids for `live-check` |
 
@@ -151,6 +161,13 @@ Gas burnt: 0.00087 NEAR.
 - Escrow on mainnet (testnet only; not audited)
 - A running exchange. One fill was settled for real (below), by one operator with throwaway keys. There is no continuous matching service, no signing flow for other users, and no tool yet to sweep the leftovers out of the two throwaway accounts
 - Network calls in default builds: `live-check` and `quote` need the `http` feature; `ONECLICK_API_KEY` is optional (without it 1Click adds its default app fee to the quote)
+
+## Next steps (not started)
+
+1. A matching service that takes orders signed by other users. Today the author runs the matcher locally, so nobody else signs.
+2. A signing flow in a wallet for the two halves of a fill.
+3. An audit of the escrow contract, then a mainnet deployment (it is testnet only today).
+4. A tool to sweep the leftovers out of the two throwaway accounts.
 
 ## Limits
 
