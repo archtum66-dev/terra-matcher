@@ -14,3 +14,4 @@ Thumbs.db
 /testnet/logs/
 /testnet/bin/
 /testnet/wasm/*.wasm
+terra-1b-keys*.json

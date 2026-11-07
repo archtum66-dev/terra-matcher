@@ -1,0 +1,19 @@
+{
+  "base_yocto": "1000000000000000000000000",
+  "buyer": "32bf3e3127148feb310eb8e0c3919cbff3750a3d110679e55a96b5bec63f7470",
+  "events": [
+    "EVENT_JSON:{\"standard\":\"dip4\",\"version\":\"0.4.3\",\"event\":\"token_diff\",\"data\":[{\"intent_hash\":\"GgYuacVw6Pq3XWy8ekKgr3corJp2LHEjGyBDcXVa1PFJ\",\"account_id\":\"32bf3e3127148feb310eb8e0c3919cbff3750a3d110679e55a96b5bec63f7470\",\"diff\":{\"nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1\":\"-3680000\",\"nep141:wrap.near\":\"999999000000000000000000\"},\"fees_collected\":{\"nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1\":\"4\"}}]}",
+    "EVENT_JSON:{\"standard\":\"dip4\",\"version\":\"0.4.3\",\"event\":\"token_diff\",\"data\":[{\"intent_hash\":\"CSNhL3BMHHxN8LMjoSjN4wMiqmghtqnzHEZ1CuUQpuFp\",\"account_id\":\"f82eede04e8b7d0b1b94661d9658b8f6d17f38ec29c25b94158b5bce939f24e1\",\"diff\":{\"nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1\":\"3679996\",\"nep141:wrap.near\":\"-1000000000000000000000000\"},\"fees_collected\":{\"nep141:wrap.near\":\"1000000000000000000\"}}]}",
+    "EVENT_JSON:{\"standard\":\"dip4\",\"version\":\"0.4.3\",\"event\":\"intents_executed\",\"data\":[{\"intent_hash\":\"GgYuacVw6Pq3XWy8ekKgr3corJp2LHEjGyBDcXVa1PFJ\",\"account_id\":\"32bf3e3127148feb310eb8e0c3919cbff3750a3d110679e55a96b5bec63f7470\",\"nonce\":\"Vij2xgAlKBKzAND0iI3a5Rg7aZMBiNz235JHgvUvFaU=\"},{\"intent_hash\":\"CSNhL3BMHHxN8LMjoSjN4wMiqmghtqnzHEZ1CuUQpuFp\",\"account_id\":\"f82eede04e8b7d0b1b94661d9658b8f6d17f38ec29c25b94158b5bce939f24e1\",\"nonce\":\"Vij2xgAlKBKzAND0iI3a5Rg31y/nERvRXINTyDOrLz4=\"}]}"
+  ],
+  "fee_pips": 1,
+  "gas_burnt_total": 16235790646896,
+  "network": "mainnet",
+  "ok": true,
+  "quote_units": "3680000",
+  "seller": "f82eede04e8b7d0b1b94661d9658b8f6d17f38ec29c25b94158b5bce939f24e1",
+  "seller_native_after_yocto": "241964144569268971428570",
+  "time_utc": "2026-11-07T19:09:46Z",
+  "tx_hash": "BSCk4kvxsxvDBEZyhfMrGAjh6WBTL5SUwN5a9dTeawDe",
+  "verifier": "intents.near"
+}
