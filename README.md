@@ -6,7 +6,7 @@ Non-custodial order matching for a NEAR Intents exchange. Limit orders are paire
 
 ## Try it in 30 seconds (no install)
 
-Open **`web/index.html`** in any current browser. It is one self-contained file: the reference matcher runs as WebAssembly, offline, with no server, no keys and no network.
+Open **https://archtum66-dev.github.io/terra-matcher/** or the file **`web/index.html`** in any current browser. The online copy is byte-identical to `web/index.html` (branch `gh-pages`, GitHub Pages). It is one self-contained file: the reference matcher runs as WebAssembly, offline, with no server, no keys and no network.
 
 - Place orders or pick a scenario (price-time priority, self-trade, post-only, IOC) and watch the book and the fills.
 - Each fill shows its unsigned `token_diff` pair and the check that every token nets to zero. Nothing is signed or sent.
@@ -19,7 +19,7 @@ The page embeds a 267 KB module built from `crates/web-demo`. `python3 web/build
 
 | Do | See |
 |---|---|
-| Open **`web/index.html`** in a browser | the order book, the fills and the unsigned `token_diff` pairs; the chip shows **22/22 conformance vectors pass** |
+| Open the **[online demo](https://archtum66-dev.github.io/terra-matcher/)** or `web/index.html` | the order book, the fills and the unsigned `token_diff` pairs; the chip shows **22/22 conformance vectors pass** |
 | Run **`cargo test --all`** | **57 tests pass**, offline |
 | Run **`python3 testnet/check-onchain.py`** | **`OK`**: the escrow on NEAR testnet (`ag2610-escrow.testnet`) has the code hash of the file in `testnet/wasm/SHA256SUMS.txt` |
 | Open the transaction links in **`docs/BENCHMARKS.md`** | real testnet trades: `settle` about **4.4 Tgas**, `withdraw` about **7 Tgas**, an overfill **rejected** with `overfill` |
