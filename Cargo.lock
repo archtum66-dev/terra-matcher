@@ -713,6 +713,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "terra-1b"
+version = "0.1.0"
+dependencies = [
+ "ed25519-dalek",
+ "intents-sign",
+ "matcher-api",
+ "matcher-stub",
+ "serde",
+ "serde_json",
+ "settlement",
+ "sha2",
+]
+
+[[package]]
 name = "terra-cli"
 version = "0.1.0"
 dependencies = [
