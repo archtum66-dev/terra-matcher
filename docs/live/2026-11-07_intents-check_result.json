@@ -1,0 +1,32 @@
+{
+    "intents_check": {
+        "accepted": true,
+        "buyer": "a05397228208ed0231e1ec07799505df06d53e0ade66d408e985a3ce5c9f0449",
+        "buyer_intents": [
+            {
+                "diff": {
+                    "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1": "-3680000",
+                    "nep141:wrap.near": "999999000000000000000000"
+                },
+                "intent": "token_diff"
+            }
+        ],
+        "control_corrupted_signature": "invalid signature",
+        "fee_pips": 1,
+        "fill_seq": 1,
+        "meaning": "intents.near accepted the format and both NEP-413 signatures; execution stops at the balances because the throwaway accounts hold no tokens",
+        "salt": "252812b3",
+        "seller": "954f669d7cc58b9f433d92871fded352e322295c839c797e9193b48048b1f203",
+        "seller_intents": [
+            {
+                "diff": {
+                    "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1": "3679996",
+                    "nep141:wrap.near": "-1000000000000000000000000"
+                },
+                "intent": "token_diff"
+            }
+        ],
+        "simulate_intents": "insufficient balance or overflow",
+        "verifier": "intents.near"
+    }
+}

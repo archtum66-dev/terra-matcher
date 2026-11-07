@@ -57,6 +57,10 @@ fn usage() {
     eprintln!(
         "  terra live-check --market <market.json> --orders <orders.jsonl> [--tolerance-bps <n>] [--slippage-bps <n>] [--record <dir>]"
     );
+    #[cfg(feature = "http")]
+    eprintln!(
+        "  terra intents-check --market <market.json> --orders <orders.jsonl> [--record <dir>]"
+    );
 }
 
 fn read_market(path: &str) -> Result<Market, String> {
@@ -368,6 +372,218 @@ fn run_live_check(
     })
 }
 
+/// Public NEAR mainnet RPC; override with `TERRA_NEAR_RPC`.
+#[cfg(feature = "http")]
+const NEAR_RPC: &str = "https://rpc.mainnet.near.org";
+
+/// Read-only `call_function` on `intents.near`. `Ok(Ok(v))`: the method returned `v`.
+/// `Ok(Err(msg))`: the contract panicked with `msg`. `Err`: network or RPC failure.
+#[cfg(feature = "http")]
+fn verifier_view(
+    method: &str,
+    args: &serde_json::Value,
+) -> Result<Result<serde_json::Value, String>, String> {
+    let url = env::var("TERRA_NEAR_RPC").unwrap_or_else(|_| NEAR_RPC.to_string());
+    let body = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": "terra",
+        "method": "query",
+        "params": {
+            "request_type": "call_function",
+            "finality": "final",
+            "account_id": intents_sign::VERIFIER,
+            "method_name": method,
+            "args_base64": intents_sign::base64(args.to_string().as_bytes()),
+        }
+    });
+    let resp = settlement::HttpTransport
+        .post_json(&url, &[], &body.to_string())
+        .map_err(|e| format!("{method}: {e}"))?;
+    let v: serde_json::Value =
+        serde_json::from_str(&resp.body).map_err(|e| format!("{method}: rpc answer: {e}"))?;
+    if let Some(err) = v.get("error") {
+        let text = err.to_string().replace("\\\"", "\"");
+        return match panic_message(&text) {
+            Some(msg) => Ok(Err(msg)),
+            None => Err(format!("{method}: rpc error: {text}")),
+        };
+    }
+    let result = v
+        .get("result")
+        .ok_or_else(|| format!("{method}: rpc answer without result"))?;
+    if let Some(err) = result.get("error").and_then(|e| e.as_str()) {
+        return Ok(Err(panic_message(err).unwrap_or_else(|| err.to_string())));
+    }
+    let bytes: Vec<u8> = result
+        .get("result")
+        .and_then(|r| r.as_array())
+        .ok_or_else(|| format!("{method}: rpc answer without bytes"))?
+        .iter()
+        .map(|b| b.as_u64().unwrap_or(0) as u8)
+        .collect();
+    serde_json::from_slice(&bytes)
+        .map(Ok)
+        .map_err(|e| format!("{method}: result: {e}"))
+}
+
+#[cfg(feature = "http")]
+fn panic_message(text: &str) -> Option<String> {
+    let start = text.find("panic_msg: \"")? + "panic_msg: \"".len();
+    let end = text[start..].find('"')? + start;
+    Some(text[start..end].to_string())
+}
+
+/// Turns every fill into its `token_diff` pair, adjusted for the verifier's live fee,
+/// signs both halves with NEP-413 using two throwaway keys (implicit accounts, no
+/// funds), and asks `intents.near` to run them with `simulate_intents` (read-only, no
+/// transaction, nothing is spent). A second call with one corrupted signature is the
+/// control: it must be rejected for the signature.
+#[cfg(feature = "http")]
+fn run_intents_check(
+    market_path: &str,
+    orders_path: &str,
+    record_dir: Option<String>,
+) -> Result<(), String> {
+    let salt_hex = verifier_view("current_salt", &serde_json::json!({}))?
+        .map_err(|e| format!("current_salt: {e}"))?;
+    let salt_hex = salt_hex.as_str().unwrap_or_default().to_string();
+    let salt =
+        intents_sign::parse_salt(&salt_hex).ok_or_else(|| format!("unexpected salt {salt_hex}"))?;
+    let fee_pips = verifier_view("fee", &serde_json::json!({}))?
+        .map_err(|e| format!("fee: {e}"))?
+        .as_u64()
+        .and_then(|f| u32::try_from(f).ok())
+        .ok_or("unexpected fee")?;
+    if let Some(ref dir) = record_dir {
+        fs::create_dir_all(dir).map_err(|e| format!("create {dir}: {e}"))?;
+    }
+    let deadline_secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+        + 600;
+    let deadline = iso_utc_after(600);
+    let mut all_accepted = true;
+    run_matcher_lines(market_path, orders_path, |market, fill| {
+        let pair = settle_fill(market, fill, &deadline)
+            .map_err(|e| format!("settle fill {}: {e}", fill.seq))?;
+        let mut pair = intents_sign::apply_protocol_fee(&pair, fee_pips)
+            .map_err(|e| format!("fee for fill {}: {e}", fill.seq))?;
+        let buyer_key = intents_sign::random_key();
+        let seller_key = intents_sign::random_key();
+        pair.buyer_draft.signer_id = intents_sign::implicit_account(&buyer_key);
+        pair.seller_draft.signer_id = intents_sign::implicit_account(&seller_key);
+        let nonce_deadline_ns = deadline_secs.saturating_mul(1_000_000_000);
+        let signed = vec![
+            intents_sign::sign_nep413(
+                &buyer_key,
+                &pair.buyer_draft,
+                intents_sign::nonce_v1(salt, nonce_deadline_ns, intents_sign::random_nonce_tail()),
+            ),
+            intents_sign::sign_nep413(
+                &seller_key,
+                &pair.seller_draft,
+                intents_sign::nonce_v1(salt, nonce_deadline_ns, intents_sign::random_nonce_tail()),
+            ),
+        ];
+        let simulated =
+            verifier_view("simulate_intents", &serde_json::json!({ "signed": signed }))?;
+        let mut corrupted = signed.clone();
+        if let Some(sig) = corrupted[0]["signature"].as_str() {
+            let mut chars: Vec<char> = sig.chars().collect();
+            let last = chars.len() - 2;
+            chars[last] = if chars[last] == '2' { '3' } else { '2' };
+            corrupted[0]["signature"] = serde_json::Value::String(chars.into_iter().collect());
+        }
+        let control = verifier_view(
+            "simulate_intents",
+            &serde_json::json!({ "signed": corrupted }),
+        )?;
+        let outcome = |r: &Result<serde_json::Value, String>| match r {
+            Ok(_) => "executed".to_string(),
+            Err(msg) => msg.clone(),
+        };
+        let sim_text = outcome(&simulated);
+        let control_text = outcome(&control);
+        let accepted = (simulated.is_ok() || sim_text.contains("insufficient balance"))
+            && control_text.contains("invalid signature");
+        all_accepted &= accepted;
+        let receives = |draft: &settlement::IntentDraft| {
+            draft
+                .intents
+                .iter()
+                .map(|i| serde_json::to_value(i).unwrap_or_default())
+                .collect::<Vec<_>>()
+        };
+        let line = serde_json::json!({
+            "intents_check": {
+                "fill_seq": fill.seq,
+                "verifier": intents_sign::VERIFIER,
+                "salt": salt_hex,
+                "fee_pips": fee_pips,
+                "buyer": pair.buyer_draft.signer_id,
+                "seller": pair.seller_draft.signer_id,
+                "buyer_intents": receives(&pair.buyer_draft),
+                "seller_intents": receives(&pair.seller_draft),
+                "simulate_intents": sim_text,
+                "control_corrupted_signature": control_text,
+                "accepted": accepted,
+                "meaning": if accepted {
+                    "intents.near accepted the format and both NEP-413 signatures; execution stops at the balances because the throwaway accounts hold no tokens"
+                } else {
+                    "unexpected verifier answer, see simulate_intents"
+                },
+            }
+        });
+        println!("{line}");
+        if let Some(ref dir) = record_dir {
+            let base = Path::new(dir);
+            let signed_text = serde_json::to_string_pretty(&signed).unwrap_or_default();
+            fs::write(
+                base.join(format!("fill-{}.signed.json", fill.seq)),
+                signed_text,
+            )
+            .map_err(|e| format!("record signed: {e}"))?;
+            fs::write(
+                base.join(format!("fill-{}.check.json", fill.seq)),
+                line.to_string(),
+            )
+            .map_err(|e| format!("record check: {e}"))?;
+        }
+        Ok(())
+    })?;
+    if all_accepted {
+        Ok(())
+    } else {
+        Err("intents.near did not answer as expected".to_string())
+    }
+}
+
+#[cfg(feature = "http")]
+fn parse_intents_check_args(args: &[String]) -> Result<(String, String, Option<String>), String> {
+    if args.is_empty() || args[0] != "intents-check" {
+        return Err("expected intents-check subcommand".to_string());
+    }
+    let (mut market, mut orders, mut record) = (None, None, None);
+    let mut i = 1;
+    while i < args.len() {
+        let flag = args[i].as_str();
+        let value = next_arg(args, i + 1, flag)?;
+        match flag {
+            "--market" => market = Some(value),
+            "--orders" => orders = Some(value),
+            "--record" => record = Some(value),
+            other => return Err(format!("unknown intents-check argument: {other}")),
+        }
+        i += 2;
+    }
+    Ok((
+        market.ok_or("missing --market")?,
+        orders.ok_or("missing --orders")?,
+        record,
+    ))
+}
+
 #[cfg(feature = "http")]
 fn parse_live_check_args(args: &[String]) -> Result<(String, String, LiveCheckOptions), String> {
     if args.is_empty() || args[0] != "live-check" {
@@ -629,6 +845,14 @@ fn main() {
         },
         [cmd, ..] if cmd == "settle" => match parse_settle_args(&args) {
             Ok((market, orders, opts)) => run_settle(&market, &orders, opts),
+            Err(e) => {
+                usage();
+                Err(e)
+            }
+        },
+        #[cfg(feature = "http")]
+        [cmd, ..] if cmd == "intents-check" => match parse_intents_check_args(&args) {
+            Ok((market, orders, record)) => run_intents_check(&market, &orders, record),
             Err(e) => {
                 usage();
                 Err(e)

@@ -332,6 +332,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "intents-sign"
+version = "0.1.0"
+dependencies = [
+ "ed25519-dalek",
+ "hex",
+ "rand_core",
+ "serde_json",
+ "settlement",
+ "sha2",
+]
+
+[[package]]
 name = "itoa"
 version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -704,6 +716,7 @@ dependencies = [
 name = "terra-cli"
 version = "0.1.0"
 dependencies = [
+ "intents-sign",
  "matcher-api",
  "matcher-stub",
  "serde",

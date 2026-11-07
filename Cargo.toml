@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "crates/escrow-types",
+    "crates/intents-sign",
     "crates/matcher-api",
     "crates/matcher-stub",
     "crates/settlement",

@@ -4,7 +4,8 @@ use crate::intent::IntentDraft;
 
 /// Builds the NEP-413 wallet message JSON string.
 ///
-/// UNVERIFIED against a live verifier.
+/// Checked against the live verifier on 2026-11-07: `intents.near` accepted messages
+/// built here, signed by `intents_sign::sign_nep413` (`terra intents-check`).
 pub fn nep413_message(draft: &IntentDraft) -> Result<String, serde_json::Error> {
     let value = json!({
         "signer_id": draft.signer_id,
@@ -16,7 +17,7 @@ pub fn nep413_message(draft: &IntentDraft) -> Result<String, serde_json::Error> 
 
 /// Builds the raw_ed25519 payload JSON string.
 ///
-/// UNVERIFIED against a live verifier.
+/// UNVERIFIED against a live verifier (only the NEP-413 path was checked).
 pub fn raw_payload(
     draft: &IntentDraft,
     verifying_contract: &str,
@@ -36,6 +37,9 @@ const BASE64_ALPHABET: &[u8; 64] =
     b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 /// Encodes 32 bytes (4-byte salt + 28-byte unique) as standard Base64 with padding.
+///
+/// Legacy layout. The verifier now expects versioned nonces (magic, version, salt,
+/// deadline, random); see `intents_sign::nonce_v1`, which `intents-check` uses.
 pub fn nonce_b64(salt: [u8; 4], unique: [u8; 28]) -> String {
     let mut bytes = [0u8; 32];
     bytes[..4].copy_from_slice(&salt);
