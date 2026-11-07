@@ -1,0 +1,2 @@
+{"type":"order","id":"s1","account":"alice.test","side":"sell","price_ticks":3680,"qty_lots":10,"tif":"gtc"}
+{"type":"order","id":"b1","account":"bob.test","side":"buy","price_ticks":3700,"qty_lots":10,"tif":"gtc"}

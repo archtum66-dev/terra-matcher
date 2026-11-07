@@ -1,0 +1,7 @@
+{
+  "market_id": "NEAR-USDC",
+  "base_token": "nep141:wrap.near",
+  "quote_token": "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
+  "lot_size_base": "100000000000000000000000",
+  "quote_per_tick_lot": "100"
+}

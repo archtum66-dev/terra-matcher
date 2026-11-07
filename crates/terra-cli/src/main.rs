@@ -14,7 +14,7 @@ use matcher_stub::StubMatcher;
 use serde::Serialize;
 use settlement::{reference_check, settle_fill, QuoteResponse, SettlementPair};
 #[cfg(feature = "http")]
-use settlement::{QuoteClient, QuoteRequest};
+use settlement::{reference_quote_request, QuoteClient, QuoteRequest, Transport, QUOTE_URL};
 
 /// Fixed example deadline (no wall clock).
 pub const DEFAULT_SETTLEMENT_DEADLINE: &str = "2030-01-01T00:00:00Z";
@@ -53,6 +53,10 @@ fn usage() {
     eprintln!("  terra bench --messages <n> [--seed <n>] [--repeat <n>]");
     #[cfg(feature = "http")]
     eprintln!("  terra quote --dry --file <request.json>");
+    #[cfg(feature = "http")]
+    eprintln!(
+        "  terra live-check --market <market.json> --orders <orders.jsonl> [--tolerance-bps <n>] [--slippage-bps <n>] [--record <dir>]"
+    );
 }
 
 fn read_market(path: &str) -> Result<Market, String> {
@@ -214,9 +218,7 @@ fn run_quote(file_path: &str) -> Result<(), String> {
     let data = fs::read_to_string(file_path).map_err(|e| format!("read request: {e}"))?;
     let req: QuoteRequest =
         serde_json::from_str(&data).map_err(|e| format!("parse request: {e}"))?;
-    let api_key = env::var("ONECLICK_API_KEY")
-        .map_err(|_| "ONECLICK_API_KEY environment variable not set".to_string())?;
-    let client = QuoteClient::new(settlement::HttpTransport).with_api_key(api_key);
+    let client = with_optional_key(QuoteClient::new(settlement::HttpTransport));
     let resp = client
         .quote(&req)
         .map_err(|e| format!("quote failed: {e}"))?;
@@ -225,6 +227,186 @@ fn run_quote(file_path: &str) -> Result<(), String> {
     serde_json::to_writer_pretty(&mut out, &resp).map_err(|e| format!("write response: {e}"))?;
     writeln!(out).map_err(|e| format!("write newline: {e}"))?;
     Ok(())
+}
+
+/// Uses `ONECLICK_API_KEY` when it is set. Without a key the public 1Click API still
+/// answers dry quotes (checked live on 2026-11-07); it then adds its default app fee.
+#[cfg(feature = "http")]
+fn with_optional_key<T: Transport>(client: QuoteClient<T>) -> QuoteClient<T> {
+    match env::var("ONECLICK_API_KEY") {
+        Ok(key) if !key.trim().is_empty() => client.with_api_key(key),
+        _ => client,
+    }
+}
+
+/// Live transport that also keeps the last request and response body, for `--record`.
+#[cfg(feature = "http")]
+struct TeeTransport {
+    last: std::sync::Arc<std::sync::Mutex<Option<(String, String)>>>,
+}
+
+#[cfg(feature = "http")]
+impl Transport for TeeTransport {
+    fn post_json(
+        &self,
+        url: &str,
+        headers: &[(String, String)],
+        body: &str,
+    ) -> Result<settlement::TransportResponse, settlement::TransportError> {
+        let resp = settlement::HttpTransport.post_json(url, headers, body)?;
+        if let Ok(mut guard) = self.last.lock() {
+            *guard = Some((body.to_string(), resp.body.clone()));
+        }
+        Ok(resp)
+    }
+}
+
+/// ISO 8601 UTC time `secs` seconds from now (quote deadlines need a real clock).
+#[cfg(feature = "http")]
+fn iso_utc_after(secs: u64) -> String {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+        + secs;
+    let days = (now / 86_400) as i64;
+    let rem = now % 86_400;
+    // Civil date from days since 1970-01-01 (Howard Hinnant's algorithm).
+    let z = days + 719_468;
+    let era = (if z >= 0 { z } else { z - 146_096 }) / 146_097;
+    let doe = (z - era * 146_097) as u64;
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = yoe as i64 + era * 400 + i64::from(month <= 2);
+    format!(
+        "{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}Z",
+        rem / 3_600,
+        (rem % 3_600) / 60,
+        rem % 60
+    )
+}
+
+#[cfg(feature = "http")]
+struct LiveCheckOptions {
+    tolerance_bps: u32,
+    slippage_bps: u32,
+    record_dir: Option<String>,
+}
+
+/// Match the orders, then ask the live NEAR Intents 1Click API (dry quote, no deposit,
+/// no funds) what the seller of each fill would get for the same base amount, and
+/// print how far the matched price is from that market price.
+#[cfg(feature = "http")]
+fn run_live_check(
+    market_path: &str,
+    orders_path: &str,
+    opts: LiveCheckOptions,
+) -> Result<(), String> {
+    use matcher_api::{base_amount, Side};
+    let last = std::sync::Arc::new(std::sync::Mutex::new(None));
+    let client = with_optional_key(QuoteClient::new(TeeTransport {
+        last: std::sync::Arc::clone(&last),
+    }));
+    if let Some(ref dir) = opts.record_dir {
+        fs::create_dir_all(dir).map_err(|e| format!("create {dir}: {e}"))?;
+    }
+    let deadline = iso_utc_after(600);
+    run_matcher_lines(market_path, orders_path, |market, fill| {
+        let seller = match fill.taker_side {
+            Side::Buy => &fill.maker_account,
+            Side::Sell => &fill.taker_account,
+        };
+        let req = reference_quote_request(market, fill, seller, &deadline, opts.slippage_bps)
+            .map_err(|e| format!("quote request for fill {}: {e}", fill.seq))?;
+        let resp = client
+            .quote(&req)
+            .map_err(|e| format!("live quote for fill {}: {e}", fill.seq))?;
+        if let Some(ref dir) = opts.record_dir {
+            if let Ok(guard) = last.lock() {
+                if let Some((ref request_body, ref response_body)) = *guard {
+                    let base = Path::new(dir);
+                    fs::write(
+                        base.join(format!("fill-{}.request.json", fill.seq)),
+                        request_body,
+                    )
+                    .map_err(|e| format!("record request: {e}"))?;
+                    fs::write(
+                        base.join(format!("fill-{}.response.json", fill.seq)),
+                        response_body,
+                    )
+                    .map_err(|e| format!("record response: {e}"))?;
+                }
+            }
+        }
+        let fill_quote = quote_amount(market, fill.qty_lots, fill.price_ticks)
+            .ok_or_else(|| format!("quote amount overflow in fill {}", fill.seq))?;
+        let sold = base_amount(market, fill.qty_lots)
+            .ok_or_else(|| format!("base amount overflow in fill {}", fill.seq))?;
+        let check = reference_check(fill_quote, &resp, opts.tolerance_bps)
+            .map_err(|e| format!("reference check for fill {}: {e}", fill.seq))?;
+        let line = serde_json::json!({
+            "live_check": {
+                "fill_seq": fill.seq,
+                "seller": seller,
+                "sold_base_amount": sold.to_string(),
+                "fill_quote_amount": fill_quote.to_string(),
+                "intents_amount_out": resp.quote.as_ref().and_then(|q| q.amount_out.clone()),
+                "deviation_bps": check.deviation_bps,
+                "within_tolerance": check.within_tolerance,
+                "tolerance_bps": opts.tolerance_bps,
+                "source": QUOTE_URL,
+                "dry": true,
+                "correlation_id": resp.correlation_id,
+                "quote_timestamp": resp.timestamp,
+            }
+        });
+        println!("{line}");
+        Ok(())
+    })
+}
+
+#[cfg(feature = "http")]
+fn parse_live_check_args(args: &[String]) -> Result<(String, String, LiveCheckOptions), String> {
+    if args.is_empty() || args[0] != "live-check" {
+        return Err("expected live-check subcommand".to_string());
+    }
+    let mut market = None;
+    let mut orders = None;
+    let mut opts = LiveCheckOptions {
+        tolerance_bps: 100,
+        slippage_bps: 100,
+        record_dir: None,
+    };
+    let mut i = 1;
+    while i < args.len() {
+        let flag = args[i].as_str();
+        let value = next_arg(args, i + 1, flag)?;
+        match flag {
+            "--market" => market = Some(value),
+            "--orders" => orders = Some(value),
+            "--record" => opts.record_dir = Some(value),
+            "--tolerance-bps" => {
+                opts.tolerance_bps = value
+                    .parse()
+                    .map_err(|_| format!("invalid --tolerance-bps: {value}"))?
+            }
+            "--slippage-bps" => {
+                opts.slippage_bps = value
+                    .parse()
+                    .map_err(|_| format!("invalid --slippage-bps: {value}"))?
+            }
+            other => return Err(format!("unknown live-check argument: {other}")),
+        }
+        i += 2;
+    }
+    Ok((
+        market.ok_or("missing --market")?,
+        orders.ok_or("missing --orders")?,
+        opts,
+    ))
 }
 
 #[cfg(feature = "http")]
@@ -447,6 +629,14 @@ fn main() {
         },
         [cmd, ..] if cmd == "settle" => match parse_settle_args(&args) {
             Ok((market, orders, opts)) => run_settle(&market, &orders, opts),
+            Err(e) => {
+                usage();
+                Err(e)
+            }
+        },
+        #[cfg(feature = "http")]
+        [cmd, ..] if cmd == "live-check" => match parse_live_check_args(&args) {
+            Ok((market, orders, opts)) => run_live_check(&market, &orders, opts),
             Err(e) => {
                 usage();
                 Err(e)

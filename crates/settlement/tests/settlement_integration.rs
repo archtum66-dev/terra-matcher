@@ -198,3 +198,42 @@ fn quote_http_errors() {
         Err(QuoteError::InvalidApiKey(_))
     ));
 }
+
+/// A response recorded from the live 1Click API on 2026-11-07 (dry quote, no funds):
+/// `terra live-check --market examples/mainnet/market.json --orders examples/mainnet/orders.jsonl --record <dir>`.
+/// The fill of that example sells 10 lots of 0.1 wNEAR at 3680 ticks of 0.0001 USDC.
+#[test]
+fn recorded_live_quote_parses_and_checks() {
+    use settlement::{reference_check, QuoteResponse};
+    let body = include_str!("fixtures/quote_live_2026-11-07.json");
+    let resp: QuoteResponse = serde_json::from_str(body).expect("live response parses");
+    let quote = resp.quote.as_ref().expect("quote present");
+    assert_eq!(
+        quote.amount_in.as_deref(),
+        Some("1000000000000000000000000")
+    );
+    let market = Market {
+        market_id: "NEAR-USDC".to_string(),
+        base_token: "nep141:wrap.near".to_string(),
+        quote_token: "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1"
+            .to_string(),
+        lot_size_base: 100_000_000_000_000_000_000_000,
+        quote_per_tick_lot: 100,
+    };
+    assert_eq!(
+        base_amount(&market, 10),
+        Some(1_000_000_000_000_000_000_000_000)
+    );
+    let fill_quote = quote_amount(&market, 10, 3_680).expect("quote amount");
+    assert_eq!(fill_quote, 3_680_000);
+    let out: i128 = quote
+        .amount_out
+        .as_deref()
+        .expect("amountOut")
+        .parse()
+        .expect("number");
+    let check = reference_check(fill_quote, &resp, 100).expect("reference check");
+    assert_eq!(check.deviation_bps, (3_680_000 - out) * 10_000 / out);
+    assert!(check.within_tolerance);
+    assert!(resp.correlation_id.is_some() && resp.timestamp.is_some());
+}

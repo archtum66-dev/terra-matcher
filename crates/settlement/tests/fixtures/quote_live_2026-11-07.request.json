@@ -1,0 +1,1 @@
+{"dry":true,"swapType":"EXACT_INPUT","slippageTolerance":100,"originAsset":"nep141:wrap.near","depositType":"INTENTS","destinationAsset":"nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1","amount":"1000000000000000000000000","refundTo":"alice.test","refundType":"INTENTS","recipient":"alice.test","recipientType":"INTENTS","deadline":"2026-11-07T10:07:57Z"}

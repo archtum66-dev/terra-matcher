@@ -2,7 +2,7 @@
 
 Non-custodial order matching for a NEAR Intents exchange. Limit orders are paired **off-chain** by a deterministic matcher that never holds funds. Every fill becomes a pair of **unsigned `token_diff` intents** that nets to zero for each token. The parties sign their own half; the NEAR Intents verifier settles. A NEAR testnet escrow contract is the second settlement path.
 
-**Status:** early scaffold, honestly labelled. Working and tested: matcher interface, 22 conformance vectors, reference matcher, settlement mapping, dry quote client, command-line tool, browser demo. Escrow contract: unit-tested and run end to end on NEAR testnet (testnet only, not audited).
+**Status:** early scaffold, honestly labelled. Working and tested: matcher interface, 22 conformance vectors, reference matcher, settlement mapping, live price check against NEAR Intents (1Click API, dry quotes, no funds), command-line tool, browser demo. Escrow contract: unit-tested and run end to end on NEAR testnet (testnet only, not audited).
 
 ## Try it in 30 seconds (no install)
 
@@ -15,13 +15,14 @@ Open **https://archtum66-dev.github.io/terra-matcher/** or the file **`web/index
 
 The page embeds a 267 KB module built from `crates/web-demo`. `python3 web/build.py --check` fails unless the committed page equals a fresh build, see "Rebuild the demo" below.
 
-## For judges: four checks, five minutes
+## For judges: five checks, five minutes
 
 | Do | See |
 |---|---|
 | Open the **[online demo](https://archtum66-dev.github.io/terra-matcher/)** or `web/index.html` | the order book, the fills and the unsigned `token_diff` pairs; the chip shows **22/22 conformance vectors pass** |
-| Run **`cargo test --all`** | **57 tests pass**, offline |
+| Run **`cargo test --all`** | **58 tests pass**, offline |
 | Run **`python3 testnet/check-onchain.py`** | **`OK`**: the escrow on NEAR testnet (`ag2610-escrow.testnet`) has the code hash of the file in `testnet/wasm/SHA256SUMS.txt` |
+| Run **`cargo run -p terra-cli --features http -- live-check --market examples/mainnet/market.json --orders examples/mainnet/orders.jsonl`** | the matcher fills 1 wNEAR, then asks the **live NEAR Intents 1Click API** (dry quote: no deposit, no funds, no key) what the seller would get there; one `live_check` line with `intents_amount_out`, `deviation_bps` and `within_tolerance` |
 | Open the transaction links in **`docs/BENCHMARKS.md`** | real testnet trades: `settle` about **4.4 Tgas**, `withdraw` about **7 Tgas**, an overfill **rejected** with `overfill` |
 
 The on-chain check is one read-only call to a public RPC. Without Python, the same hash comes from `curl -s https://test.rpc.fastnear.com -H 'content-type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"query","params":{"request_type":"view_account","finality":"final","account_id":"ag2610-escrow.testnet"}}'` (field `code_hash`; `CqNy4yyFdW8FodZjFVyEYfxxmApygSYqmZzs5x9XLxjA`).
@@ -79,7 +80,7 @@ Use `python3 web/build.py` instead of `--check` to regenerate `web/index.html` a
 | Another engine can replace the reference matcher | the same vectors and `terra gen` flows; outputs are compared line by line |
 | Commands in this README work | `crates/terra-cli/tests/cli.rs` starts the real binary for `demo`, `match`, `settle`, `gen`, `bench` |
 
-`cargo test --all` runs 57 tests offline. The contract has its own 31 tests (30 unit tests and one interop test) and the test token 5 (see below).
+`cargo test --all` runs 58 tests offline. The contract has its own 31 tests (30 unit tests and one interop test) and the test token 5 (see below).
 
 ## Settlement
 
@@ -118,17 +119,17 @@ The NEAR testnet escrow holds NEP-141 deposits as free balances, verifies ed2551
 | `web/` | Browser demo: `index.html` (built), `index.template.html`, `build.py` |
 | `tests/vectors/` | Public conformance vectors (JSON) |
 | `docs/` | `SPEC.md`, `BENCHMARKS.md`, `ESCROW.md`, `TESTNET.md`, `INTENTS_FACTS.md` |
-| `examples/` | Example market and orders |
+| `examples/` | Example market and orders; `mainnet/` with the real token ids for `live-check` |
 
 ## Not here yet
 
-- A hosted copy of the demo (the page works from a local file)
 - Escrow on mainnet (testnet only; not audited)
-- Live verifier or 1Click integration in default builds (use `settlement` / `terra-cli` `http` feature only when you intentionally call the public quote API with `ONECLICK_API_KEY`)
+- A live call to the NEAR Intents verifier (`intents.near`): the `token_diff` pairs are drafts, nothing is signed or executed on mainnet
+- Network calls in default builds: `live-check` and `quote` need the `http` feature; `ONECLICK_API_KEY` is optional (without it 1Click adds its default app fee to the quote)
 
 ## Limits
 
-Quote and settlement fixtures are hand-written from public documentation, not recorded from a live system. Wallet message JSON shapes are marked `UNVERIFIED` in code until checked against `intents.near`. The escrow contract has unit tests, one interop test and three recorded testnet runs; it is not audited and not on mainnet. Gas of `settle` and `withdraw` is measured on testnet (see `docs/BENCHMARKS.md`); the gas of the token deposit is not recorded. The browser demo and the matcher benchmarks use the reference matcher and do not talk to NEAR.
+Settlement fixtures are hand-written from public documentation. One quote response was recorded from the live 1Click API on 7 November 2026 (`crates/settlement/tests/fixtures/quote_live_2026-11-07.json`, with its request); a test parses it and repeats the price check. Live quotes move: run `live-check` again and the deviation will differ. Wallet message JSON shapes are marked `UNVERIFIED` in code until checked against `intents.near`. The escrow contract has unit tests, one interop test and three recorded testnet runs; it is not audited and not on mainnet. Gas of `settle` and `withdraw` is measured on testnet (see `docs/BENCHMARKS.md`); the gas of the token deposit is not recorded. The browser demo and the matcher benchmarks use the reference matcher and do not talk to NEAR.
 
 ## Provenance
 
@@ -146,7 +147,7 @@ Quote and settlement fixtures are hand-written from public documentation, not re
 ## AI assistance
 
 - **Drafted with AI:** code and documents were drafted with Cursor (models Grok and Composer) and Claude.
-- **Checked by:** tests (57 plus 31), three recorded testnet runs, and one read-only review pass of the whole repository.
+- **Checked by:** tests (58 plus 31), three recorded testnet runs, and one read-only review pass of the whole repository.
 - **Author:** set the scope, approved every step and ran the testnet transactions.
 
 ## Related project
