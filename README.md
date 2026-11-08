@@ -2,15 +2,15 @@
 
 Non-custodial order matching for a NEAR Intents exchange. Limit orders are paired **off-chain** by a deterministic matcher that never holds funds. Every fill becomes a pair of **unsigned `token_diff` intents** that nets to zero for each token. The parties sign their own half; the NEAR Intents verifier settles. A NEAR testnet escrow contract is the second settlement path.
 
-**Status:** early scaffold, honestly labelled. Working and tested: matcher interface, 22 conformance vectors, reference matcher, settlement mapping, live price check against NEAR Intents (1Click API, dry quotes, no funds), NEP-413 signing **accepted by `intents.near` in simulation**, **one real fill settled on NEAR mainnet through `intents.near`** (7 November 2026, see "A real settlement on mainnet"), command-line tool, browser demo. Escrow contract: unit-tested and run end to end on NEAR testnet (testnet only, not audited).
+**Status:** early scaffold, honestly labelled. Working and tested: matcher interface, 22 conformance vectors, reference matcher, settlement mapping, live price check against NEAR Intents (1Click API, dry quotes, no funds), NEP-413 signing **accepted by `intents.near` in simulation**, **two real fills settled on NEAR mainnet through `intents.near`**, one in each direction (7 and 8 November 2026, see "Two real settlements on mainnet"), command-line tool, browser demo. Escrow contract: unit-tested and run end to end on NEAR testnet (testnet only, not audited).
 
 ## Verify in 3 steps
 
-1. **`python3 scripts/check-mainnet-tx.py`**: reads the real mainnet settlement (1 NEAR for 3.68 USDC through `intents.near`) from a public RPC node and checks it against the recording. Python 3 only, no install, no keys. Last line: `ALL CHECKS PASSED`.
+1. **`python3 scripts/check-mainnet-tx.py`**: reads the two real mainnet settlements (1 NEAR for 3.68 USDC on 7 November, 0.9 NEAR for 3.33 USDC in the opposite direction on 8 November, both through `intents.near`) from a public RPC node and checks each against its recording. Python 3 only, no install, no keys. Last line: `ALL CHECKS PASSED`.
 2. **Open the [online demo](https://archtum66-dev.github.io/terra-matcher/)**: the matcher in your browser, offline; the chip shows 22/22 conformance vectors.
 3. **`cargo test --all`**: 68 tests pass, offline.
 
-What this does not show: one fill between two throwaway accounts of the author, at the price of the example orders. It is not a running exchange (see "Limits").
+What this does not show: two fills between the same two throwaway accounts of the author, at the prices of the example orders. It is not a running exchange (see "Limits").
 
 ## Try it in 30 seconds (no install)
 
@@ -27,7 +27,7 @@ The page embeds a 267 KB module built from `crates/web-demo`. `python3 web/build
 
 | Do | See |
 |---|---|
-| Run **`python3 scripts/check-mainnet-tx.py`** | the **real mainnet settlement** read from a public RPC node: transaction succeeded on `intents.near`, two `token_diff` events, each side gave the recorded amount, received it minus the verifier fee, nothing created or lost, events equal the recording in `docs/live/`; `ALL CHECKS PASSED` |
+| Run **`python3 scripts/check-mainnet-tx.py`** | the **two real mainnet settlements** read from a public RPC node: each transaction succeeded on `intents.near`, two `token_diff` events, each side gave the recorded amount, received it minus the verifier fee, nothing created or lost, events equal the recordings in `docs/live/`; nine checks per transaction, then `ALL CHECKS PASSED` |
 | Open the **[online demo](https://archtum66-dev.github.io/terra-matcher/)** or `web/index.html` | the order book, the fills and the unsigned `token_diff` pairs; the chip shows **22/22 conformance vectors pass** |
 | Run **`cargo test --all`** | **68 tests pass**, offline |
 | Run **`python3 testnet/check-onchain.py`** | **`OK`**: the escrow on NEAR testnet (`ag2610-escrow.testnet`) has the code hash of the file in `testnet/wasm/SHA256SUMS.txt` |
@@ -130,36 +130,54 @@ The NEAR testnet escrow holds NEP-141 deposits as free balances, verifies ed2551
 | `testnet/` | PowerShell run kit for testnet: accounts, deploy, keys, deposit, settle, withdraw; `check-onchain.py` compares the deployed code hash with `wasm/SHA256SUMS.txt` |
 | `web/` | Browser demo: `index.html` (built), `index.template.html`, `build.py` |
 | `tests/vectors/` | Public conformance vectors (JSON) |
-| `scripts/` | `check-mainnet-tx.py`: read-only check of the recorded mainnet settlement against a public RPC node (Python 3, no packages) |
-| `docs/` | `SPEC.md`, `BENCHMARKS.md`, `ESCROW.md`, `TESTNET.md`, `INTENTS_FACTS.md`, `live/` (recorded `intents-check` run and the real `terra-1b` settlement) |
+| `scripts/` | `check-mainnet-tx.py`: read-only check of the recorded mainnet settlements against a public RPC node (Python 3, no packages) |
+| `docs/` | `SPEC.md`, `BENCHMARKS.md`, `ESCROW.md`, `TESTNET.md`, `INTENTS_FACTS.md`, `live/` (recorded `intents-check` run and the two real `terra-1b` settlements) |
 | `examples/` | Example market and orders; `mainnet/` with the real token ids for `live-check` |
 
-## A real settlement on mainnet
+## Two real settlements on mainnet
 
-On **7 November 2026, 20:09:46 CET (19:09:46 UTC)** one fill of this matcher was settled for real on NEAR mainnet through `intents.near`: **1 NEAR for 3.68 USDC**.
+Two fills of this matcher were settled for real on NEAR mainnet through `intents.near`, in opposite directions, between the same two throwaway accounts of the author.
 
-- **Transaction:** `BSCk4kvxsxvDBEZyhfMrGAjh6WBTL5SUwN5a9dTeawDe` (https://nearblocks.io/txns/BSCk4kvxsxvDBEZyhfMrGAjh6WBTL5SUwN5a9dTeawDe), final, successful, signed by the seller account, one `execute_intents` call carrying both intents
-- **Recording:** `docs/live/2026-11-07_terra-1b_result.json` (public data only: accounts, amounts, events, gas)
+| | Fill 1 | Fill 2 |
+|---|---|---|
+| **Time** | 7 Nov 2026, 20:09:46 CET (19:09:46 UTC) | 8 Nov 2026, 09:38:48 CET (08:38:48 UTC) |
+| **Fill** | **1 NEAR for 3.68 USDC** | **0.9 NEAR for 3.33 USDC** |
+| **Orders** | `examples/mainnet/orders.jsonl` | `examples/mainnet/orders-reverse.jsonl` |
+| **Account `f82eede0…`** | sells NEAR, signs the transaction | buys NEAR, signs the transaction |
+| **Account `32bf3e31…`** | buys NEAR | sells NEAR |
+| **Transaction** | `BSCk4kvxsxvDBEZyhfMrGAjh6WBTL5SUwN5a9dTeawDe` ([nearblocks](https://nearblocks.io/txns/BSCk4kvxsxvDBEZyhfMrGAjh6WBTL5SUwN5a9dTeawDe)) | `AForJs3YZG491cECZCcekMtNqkA3rdyx8Z8pBPYG5WBj` ([nearblocks](https://nearblocks.io/txns/AForJs3YZG491cECZCcekMtNqkA3rdyx8Z8pBPYG5WBj)) |
+| **Recording** | `docs/live/2026-11-07_terra-1b_result.json` | `docs/live/2026-11-08_terra-1b_result.json` |
+| **Gas paid** | 0.00087 NEAR | 0.00086 NEAR |
+
+Each transaction is final and successful: **one `execute_intents` call** carrying both intents. The recordings hold public data only: accounts, amounts, events, gas.
+
+**Fill 1**
 
 | | Gives | Receives | Verifier fee (1 pip of what the side gives) |
 |---|---|---|---|
 | Seller | 1.000000 wNEAR | 3.679996 USDC | 0.000001 wNEAR |
 | Buyer | 3.680000 USDC | 0.999999 wNEAR | 0.000004 USDC |
 
-Gas burnt: 0.00087 NEAR.
+**Fill 2** (opposite direction)
+
+| | Gives | Receives | Verifier fee (1 pip of what the side gives) |
+|---|---|---|---|
+| Seller | 0.900000 wNEAR | 3.329996 USDC | 0.0000009 wNEAR |
+| Buyer | 3.330000 USDC | 0.8999991 wNEAR | 0.000004 USDC |
 
 **How it was done** (`crates/terra-1b`, 5 unit tests):
 1. `terra-1b keys` made two throwaway accounts (implicit accounts, keys stay on the author's computer).
-2. Both were funded with SOL through 1Click deposit addresses (about 0.10 SOL in total, one attempt was refunded in full after `INTENT_SUBMIT_FAILED` and repeated). The seller also got a little native NEAR for gas.
-3. `terra-1b plan` matched `examples/mainnet/orders.jsonl` with the reference matcher, signed both halves (NEP-413, versioned nonce V1, fee-adjusted) and ran `simulate_intents`: `READY: true`.
-4. `terra-1b execute` sent **one** `execute_intents` after the author typed `JA SENDEN`. Hard caps in the code: one fill, at most 1.2 NEAR and 5 USDC.
+2. Both were funded with SOL through 1Click deposit addresses (about 0.10 SOL in total, one attempt was refunded in full after `INTENT_SUBMIT_FAILED` and repeated). The first account also got a little native NEAR for gas.
+3. `terra-1b plan` matched the example orders with the reference matcher, signed both halves (NEP-413, versioned nonce V1, fee-adjusted) and ran `simulate_intents`: `READY: true`.
+4. `terra-1b execute` sent **one** `execute_intents` after the author typed `JA SENDEN`. Hard caps in the code: one fill per run, at most 1.2 NEAR and 5 USDC.
+5. Fill 2 ran the same way with the flag `--reverse`: the two accounts swap roles, so the NEAR goes back. The first account still signs, because only it holds native NEAR for gas.
 
-**What this does not show:** the price of 3.68 USDC is the price of the example orders, not a market-derived trade; both sides are throwaway accounts of the author; nobody else signed. It proves the path matcher, `token_diff` pair, NEP-413 signature, fee handling and `execute_intents` on the real verifier. It is not a running exchange.
+**What this does not show:** the prices (3.68 and 3.70 USDC per NEAR) are the prices of the example orders, not market-derived trades; both sides are throwaway accounts of the author; nobody else signed. The second fill shows that the path works in both directions, not that anyone else can use it. It proves the path matcher, `token_diff` pair, NEP-413 signature, fee handling and `execute_intents` on the real verifier. It is not a running exchange.
 
 ## Not here yet
 
 - Escrow on mainnet (testnet only; not audited)
-- A running exchange. One fill was settled for real (below), by one operator with throwaway keys. There is no continuous matching service, no signing flow for other users, and no tool yet to sweep the leftovers out of the two throwaway accounts
+- A running exchange. Two fills were settled for real (see "Two real settlements on mainnet"), by one operator with throwaway keys. There is no continuous matching service, no signing flow for other users, and no tool yet to sweep the leftovers out of the two throwaway accounts
 - Network calls in default builds: `live-check` and `quote` need the `http` feature; `ONECLICK_API_KEY` is optional (without it 1Click adds its default app fee to the quote)
 
 ## Next steps (not started)
@@ -171,7 +189,7 @@ Gas burnt: 0.00087 NEAR.
 
 ## Limits
 
-Settlement fixtures are hand-written from public documentation. One quote response was recorded from the live 1Click API on 7 November 2026 (`crates/settlement/tests/fixtures/quote_live_2026-11-07.json`, with its request); a test parses it and repeats the price check. Live quotes move: run `live-check` again and the deviation will differ. The NEP-413 message, the versioned nonce and the fee-adjusted pair were checked against `intents.near` with `simulate_intents` on 7 November 2026 (throwaway keys, nothing spent; `docs/live/`). `settle` prints the zero-sum pair; the verifier takes a fee (1 pip on that day) from what each side gives, so `intents-check` lowers what each side receives by that fee. The `raw_ed25519` payload is still marked `UNVERIFIED`. The escrow contract has unit tests, one interop test and three recorded testnet runs; it is not audited and not on mainnet. Gas of `settle` and `withdraw` is measured on testnet (see `docs/BENCHMARKS.md`); the gas of the token deposit is not recorded. The browser demo and the matcher benchmarks use the reference matcher and do not talk to NEAR. The real mainnet run (`docs/live/2026-11-07_terra-1b_result.json`) is a single fill between two throwaway accounts of the author at the price of the example orders; leftovers stay in those accounts.
+Settlement fixtures are hand-written from public documentation. One quote response was recorded from the live 1Click API on 7 November 2026 (`crates/settlement/tests/fixtures/quote_live_2026-11-07.json`, with its request); a test parses it and repeats the price check. Live quotes move: run `live-check` again and the deviation will differ. The NEP-413 message, the versioned nonce and the fee-adjusted pair were checked against `intents.near` with `simulate_intents` on 7 November 2026 (throwaway keys, nothing spent; `docs/live/`). `settle` prints the zero-sum pair; the verifier takes a fee (1 pip on that day) from what each side gives, so `intents-check` lowers what each side receives by that fee. The `raw_ed25519` payload is still marked `UNVERIFIED`. The escrow contract has unit tests, one interop test and three recorded testnet runs; it is not audited and not on mainnet. Gas of `settle` and `withdraw` is measured on testnet (see `docs/BENCHMARKS.md`); the gas of the token deposit is not recorded. The browser demo and the matcher benchmarks use the reference matcher and do not talk to NEAR. The two real mainnet runs (`docs/live/2026-11-07_terra-1b_result.json` and `docs/live/2026-11-08_terra-1b_result.json`) are two fills in opposite directions between the same two throwaway accounts of the author, at the prices of the example orders; leftovers stay in those accounts.
 
 ## Provenance
 

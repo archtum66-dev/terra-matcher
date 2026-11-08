@@ -1,0 +1,21 @@
+{
+  "base_yocto": "900000000000000000000000",
+  "buyer": "f82eede04e8b7d0b1b94661d9658b8f6d17f38ec29c25b94158b5bce939f24e1",
+  "events": [
+    "EVENT_JSON:{\"standard\":\"dip4\",\"version\":\"0.4.3\",\"event\":\"token_diff\",\"data\":[{\"intent_hash\":\"ARsdQedM6AtdmpcQoyr62UTxDgBYta7MWUDFAs5UNURf\",\"account_id\":\"f82eede04e8b7d0b1b94661d9658b8f6d17f38ec29c25b94158b5bce939f24e1\",\"diff\":{\"nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1\":\"-3330000\",\"nep141:wrap.near\":\"899999100000000000000000\"},\"fees_collected\":{\"nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1\":\"4\"}}]}",
+    "EVENT_JSON:{\"standard\":\"dip4\",\"version\":\"0.4.3\",\"event\":\"token_diff\",\"data\":[{\"intent_hash\":\"5E4ekVjFDBG5vnmECYC1xjtTW7uC6KF8TMvhn1PXop82\",\"account_id\":\"32bf3e3127148feb310eb8e0c3919cbff3750a3d110679e55a96b5bec63f7470\",\"diff\":{\"nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1\":\"3329996\",\"nep141:wrap.near\":\"-900000000000000000000000\"},\"fees_collected\":{\"nep141:wrap.near\":\"900000000000000000\"}}]}",
+    "EVENT_JSON:{\"standard\":\"dip4\",\"version\":\"0.4.3\",\"event\":\"intents_executed\",\"data\":[{\"intent_hash\":\"ARsdQedM6AtdmpcQoyr62UTxDgBYta7MWUDFAs5UNURf\",\"account_id\":\"f82eede04e8b7d0b1b94661d9658b8f6d17f38ec29c25b94158b5bce939f24e1\",\"nonce\":\"Vij2xgAlKBKzACQpOUwG5hjwbYAIXA13/6AVaAkkIB0=\"},{\"intent_hash\":\"5E4ekVjFDBG5vnmECYC1xjtTW7uC6KF8TMvhn1PXop82\",\"account_id\":\"32bf3e3127148feb310eb8e0c3919cbff3750a3d110679e55a96b5bec63f7470\",\"nonce\":\"Vij2xgAlKBKzACQpOUwG5hgOwTPeU0j9fAjwmNX1WzI=\"}]}"
+  ],
+  "fee_pips": 1,
+  "gas_burnt_total": 16164753767031,
+  "network": "mainnet",
+  "ok": true,
+  "payer_native_after_yocto": "241100163961315871428570",
+  "quote_units": "3330000",
+  "reverse": true,
+  "seller": "32bf3e3127148feb310eb8e0c3919cbff3750a3d110679e55a96b5bec63f7470",
+  "signer": "f82eede04e8b7d0b1b94661d9658b8f6d17f38ec29c25b94158b5bce939f24e1",
+  "time_utc": "2026-11-08T08:38:48Z",
+  "tx_hash": "AForJs3YZG491cECZCcekMtNqkA3rdyx8Z8pBPYG5WBj",
+  "verifier": "intents.near"
+}
