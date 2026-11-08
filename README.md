@@ -12,6 +12,14 @@ Non-custodial order matching for a NEAR Intents exchange. Limit orders are paire
 
 What this does not show: two fills between the same two throwaway accounts of the author, at the prices of the example orders. It is not a running exchange (see "Limits").
 
+## Why it matters
+
+- **The gap:** NEAR Intents settles a pair of signed `token_diff` intents atomically, but something has to decide which orders pair up, and at what price. Terra is a tested, deterministic matcher for exactly that step, and it never holds funds.
+- **Who can use it:** teams that want limit orders or an order book on top of NEAR Intents, such as front ends and market makers. They can run the matcher, compare it with any other engine on the 22 public conformance vectors, and settle the result on `intents.near`.
+- **Why non-custodial matters:** the matcher only produces unsigned intents. Each party signs only its own half, with exact amounts, so a matcher bug cannot move funds a party did not sign for.
+- **What is proven:** two real settlements on NEAR mainnet, one in each direction, re-checkable with one script. **What is not:** a running service, signatures of other users, an audited escrow.
+- **Path to production:** a service that takes orders signed by other users, a wallet signing flow, and an audit before any mainnet escrow (see "Next steps").
+
 ## Try it in 30 seconds (no install)
 
 Open **https://archtum66-dev.github.io/terra-matcher/** or the file **`web/index.html`** in any current browser. The online copy is byte-identical to `web/index.html` (branch `gh-pages`, GitHub Pages). It is one self-contained file: the reference matcher runs as WebAssembly, offline, with no server, no keys and no network.
